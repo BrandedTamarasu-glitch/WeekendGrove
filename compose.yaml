@@ -1,0 +1,19 @@
+services:
+  weekend-grove:
+    build: .
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - grove-data:/data
+    environment:
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  grove-data:
