@@ -42,24 +42,21 @@ Use **Export JSON** for a portable backup of all ideas, archived/demo flags, sav
 
 Use **Database backup** for a transaction-consistent SQLite backup. Full database replacement is a separate, potentially destructive recovery action: stop the app, explicitly confirm replacement, make a safety copy, replace `weekend.sqlite3`, preserve ownership, and restart. This app never performs that replacement. Backups contain whatever you enter; treat them as household data. The first upgrade from the original schema creates `data/before-upgrade-v2.sqlite3` and adds stable IDs without altering existing idea fields or saved snapshots. The currency upgrade from version 2 creates `data/before-upgrade-v3.sqlite3` before adding currency metadata. Keep those safety copies until you have verified a fresh backup.
 
-## Docker packaging, for later
+## Docker packaging and Unraid preparation
 
-Docker packaging is provided for optional future self-hosting. No Unraid deployment is performed by this repository.
+The base Compose configuration still defaults to **127.0.0.1:8765** with a persistent named volume at `/data`. `GROVE_IMAGE`, `GROVE_BIND_IP`, `GROVE_PORT`, and `GROVE_ALLOWED_HOSTS` can be set in a private `.env` copied from [.env.example](.env.example). No GitHub Actions or registry publishing is required.
+
+For a later Unraid deployment, [the installation/recovery guide](docs/unraid.md) covers choosing healthy appdata storage, UID/GID 10001 permissions, explicit home-LAN binding, private migration of current PC records, backups, upgrades, and rollback. [compose.unraid.yaml](compose.unraid.yaml) replaces the named volume with a required existing appdata bind mount and never silently creates a missing directory. Review the rendered configuration before any deployment. No Unraid path, healthy pool, interface IP, or port is assumed.
 
 ```sh
+# Default local container, after choosing to run it:
 docker compose up --build -d
+
+# Validate the future Unraid config after editing a private .env:
+docker compose --env-file .env -f compose.yaml -f compose.unraid.yaml config
 ```
 
-The provided Compose file publishes **127.0.0.1:8765 only**, and persists SQLite in the named `grove-data` volume mounted at `/data`. The container listens on `0.0.0.0` internally for Docker forwarding; the host port remains localhost-only. The container runs as UID/GID **10001:10001**, with a read-only root filesystem and writable `/data` and temporary `/tmp`.
-
-For an eventual Unraid installation, after verifying host storage health and explicitly choosing to deploy:
-
-1. Build the image from this directory, or transfer an image built here. Use container port `8765`.
-2. Bind a persistent appdata directory, e.g. `/mnt/user/appdata/weekend-grove`, to container `/data`. Give that directory UID/GID `10001:10001` write access before starting; never mount all of appdata. The resulting database is `/mnt/user/appdata/weekend-grove/weekend.sqlite3`.
-3. Keep host networking off. The supplied localhost mapping only works from Unraid itself. For later home LAN use, deliberately configure a host IP/port mapping and `ALLOWED_HOSTS` with the exact LAN hostname/IP used in the browser, plus `127.0.0.1` for the health check. Values are comma-separated hostnames/IPs without port numbers. This README does not make those changes.
-4. Back up the `/data` directory while stopped, or use the app’s consistent database backup while running. Recreating the container must preserve this volume.
-
-Do not expose this app on the internet or configure router forwarding. Docker packaging is supplied for future use; see verification notes for what was actually executed.
+The image runs as UID/GID **10001:10001**, with a read-only root and writable `/data` and temporary `/tmp`. No deployment is performed by this repository. Do not expose this unauthenticated prototype on the internet. Read the guide before running on Unraid or replacing any database.
 
 ## Verification
 
@@ -67,6 +64,10 @@ Do not expose this app on the internet or configure router forwarding. Docker pa
 python -m unittest discover -s tests -v
 python -m compileall -q server.py tests
 node --check static/app.js
+docker compose config --quiet
+# Optional isolated Docker persistence/recovery checks:
+docker build -t weekend-grove:deployment-review .
+python -W error::ResourceWarning tests/container_smoke.py --image weekend-grove:deployment-review
 ```
 
 The latest validation passed **34 tests**, including daily category maximums, locked day preservation, Lazy Day duration/quotas, no-match constraints, snapshot restart persistence, export/restore, currency handling, and host/origin protections. Desktop and narrow-phone browser checks passed. The Docker image built locally; this does not verify an Unraid deployment. See [verification evidence](docs/verification.md) and [ROADMAP.md](ROADMAP.md) for scope and remaining deployment checks.

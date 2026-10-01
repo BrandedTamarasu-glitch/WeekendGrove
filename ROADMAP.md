@@ -8,6 +8,8 @@
 
 ## Before eventual Unraid deployment
 
+The reviewed configuration and private migration/recovery procedure are in [docs/unraid.md](docs/unraid.md). Local checks run before pushes; GitHub Actions is intentionally not configured.
+
 - Verify host storage health before an explicitly authorized deployment.
 - Confirm the intended appdata bind mount, UID/GID 10001 permissions, backup/restore procedure, container health, and restart persistence on Unraid.
 - Test the actual phone on the home LAN after an explicitly authorized LAN-only configuration. The PC prototype remains localhost-only now.

@@ -1,0 +1,11 @@
+# Apply with compose.yaml only after choosing healthy persistent storage.
+# The /data target replaces the base named volume; it never mounts all appdata.
+services:
+  weekend-grove:
+    pull_policy: never
+    volumes:
+      - type: bind
+        source: "${GROVE_APPDATA_PATH:?Set GROVE_APPDATA_PATH to a confirmed existing healthy appdata directory}"
+        target: /data
+        bind:
+          create_host_path: false

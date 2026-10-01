@@ -1,12 +1,13 @@
 services:
   weekend-grove:
     build: .
+    image: "${GROVE_IMAGE:-weekend-grove:local}"
     ports:
-      - "127.0.0.1:8765:8765"
+      - "${GROVE_BIND_IP:-127.0.0.1}:${GROVE_PORT:-8765}:8765"
     volumes:
       - grove-data:/data
     environment:
-      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      ALLOWED_HOSTS: "${GROVE_ALLOWED_HOSTS:-localhost,127.0.0.1}"
     restart: unless-stopped
     read_only: true
     tmpfs:
