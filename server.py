@@ -458,9 +458,16 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed_host():
             return
         path = urlparse(self.path).path
-        if path in ('/', '/app.js', '/style.css'):
+        static_types = {
+            '/': 'text/html; charset=utf-8', '/app.js': 'text/javascript',
+            '/style.css': 'text/css', '/icon.svg': 'image/svg+xml',
+            '/favicon.ico': 'image/vnd.microsoft.icon', '/icon-32.png': 'image/png',
+            '/apple-touch-icon.png': 'image/png', '/icon-192.png': 'image/png',
+            '/icon-512.png': 'image/png', '/site.webmanifest': 'application/manifest+json',
+        }
+        if path in static_types:
             name = 'index.html' if path == '/' else path[1:]
-            mime = {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript', 'style.css': 'text/css'}[name]
+            mime = static_types[path]
             return self.send((ROOT / 'static' / name).read_bytes(), content_type=mime)
         with connect() as db:
             if path in ('/api/state', '/api/export'):
