@@ -1,7 +1,8 @@
 FROM python:3.14-slim
 WORKDIR /app
-COPY server.py ./
+COPY server.py discovery.py ./
 COPY static ./static
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN useradd --uid 10001 --create-home grove && mkdir /data && chown grove:grove /data
 USER 10001:10001
 ENV DATA_DIR=/data PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1

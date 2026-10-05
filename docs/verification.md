@@ -25,3 +25,12 @@ The optional `tests/container_smoke.py` passed against the built local app image
 Only temporary synthetic databases were used. Temporary containers/networks and files were removed after the tests. No real PC database was exported, copied, or changed. No Unraid access, plugin installation, monitoring, LAN/security configuration, registry image push, PR merge, or deployment occurred.
 
 See [the installation/recovery plan](unraid.md), `.env.example`, and `compose.unraid.yaml`. The actual Unraid version, architecture, healthy storage path, LAN interface/port, and Compose/template availability remain unverified deployment prerequisites. Local stopped-container backup recovery is tested; compatibility of an older image with a newer database schema is not assumed, and rollback requires the matching pre-upgrade image and data backup.
+
+## Discover local review — October 5, 2026
+
+- 54 local tests pass, including the original 34 checks. New checks cover ZIP/radius validation, DST scheduling, leases and catch-up, revoked permission, cached lookups, bounded HTTPS and redirect rejection, import validation, persistent Save/Dismiss, additive version 5 restore, migration safety copy, expired events, matching weekend dates and HTTP save rejection.
+- Python compilation, both JavaScript syntax checks and `git diff --check` pass. No CI workflow was added.
+- Actual bounded HTTPS client returned the generic ZIP lookup and the city Events feed successfully. Only these operationally verified providers are enabled; no household data was sent.
+- Browser checks at desktop and 390px width confirmed Save into the idea bank, Dismiss/history, a date-matching Saturday plan, saved source/date snapshots, settings without consent keeping refresh disabled, and persistence across the disposable preview restart. No page overflow at the tested phone width. This was browser emulation, not a physical phone test.
+- Production still uses the existing stable image. The separate authorized Docker metadata change kept the same image, mount, port and security settings; private before/after exports were equal and SQLite checks passed.
+- The Discover container image was not built here: Docker is not installed on this workstation. The Dockerfile adds distro timezone/certificate data; validate that build before production. See [provider disclosure and remaining limits](discovery.md).

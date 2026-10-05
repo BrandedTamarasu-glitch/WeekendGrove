@@ -19,3 +19,7 @@ The reviewed configuration and private migration/recovery procedure are in [docs
 
 - Decide whether plan deletion and automatic backup scheduling are useful after trying the local prototype.
 - Final narrow-phone and JSON file-picker UI restore checks are complete after browser/connection recovery; no feature changes were needed to close those verification gaps.
+
+## Discover local review
+
+The in-app inbox, configurable ZIP/radii, dated planning, persisted opt-in scheduler and version 5 recovery are implemented locally. The working source is the City of Stanwood community calendar. Restaurants/places need a validated no-cost provider; regional coverage remains explicit. See [discovery details](docs/discovery.md). Production deployment remains separate from source validation and local review.

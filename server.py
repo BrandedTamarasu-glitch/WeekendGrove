@@ -8,6 +8,7 @@ import random
 import sqlite3
 import tempfile
 import uuid
+import discovery
 from contextlib import closing
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -52,6 +53,11 @@ def initialize():
             if not has_currency and not safety_copy.exists():
                 with closing(sqlite3.connect(safety_copy)) as target:
                     db.backup(target)
+        if existing and 'metadata' not in {r['name'] for r in db.execute('PRAGMA table_info(ideas)')}:
+            safety_copy = DB.parent / 'before-upgrade-v5.sqlite3'
+            if not safety_copy.exists():
+                with closing(sqlite3.connect(safety_copy)) as target:
+                    db.backup(target)
         db.executescript('''
         CREATE TABLE IF NOT EXISTS ideas (
           id INTEGER PRIMARY KEY, title TEXT NOT NULL, category TEXT NOT NULL,
@@ -67,6 +73,9 @@ def initialize():
             for row in db.execute(f'SELECT id FROM {table} WHERE uid IS NULL').fetchall():
                 db.execute(f'UPDATE {table} SET uid=? WHERE id=?', (str(uuid.uuid4()), row['id']))
             db.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS {table}_uid ON {table}(uid)')
+        if 'metadata' not in {r['name'] for r in db.execute('PRAGMA table_info(ideas)')}:
+            db.execute("ALTER TABLE ideas ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
+        discovery.initialize(db)
         idea_uids = {r['id']: r['uid'] for r in db.execute('SELECT id,uid FROM ideas')}
         for row in db.execute('SELECT id,uid,payload FROM plans').fetchall():
             payload = json.loads(row['payload'])
@@ -136,9 +145,15 @@ def set_currency(db, currency, assumed=False):
         db.execute('UPDATE settings SET value=? WHERE key=?', (json.dumps(value), key))
 
 def export_state(db):
-    return dict(version=4, defaults=defaults_from(db), **currency_from(db),
-                ideas=[dict(r) for r in db.execute('SELECT * FROM ideas ORDER BY id DESC')],
-                plans=[dict(id=r['id'], uid=r['uid'], name=r['name'], created=r['created'], **(dict(schedule=[], **json.loads(r['payload'])) if 'schedule' not in json.loads(r['payload']) else json.loads(r['payload']))) for r in db.execute('SELECT * FROM plans ORDER BY id DESC')])
+    return dict(version=5, defaults=defaults_from(db), **currency_from(db), discovery=discovery.exported(db),
+                ideas=[discovery.idea_row(r) for r in db.execute('SELECT * FROM ideas ORDER BY id DESC')],
+                plans=[dict(id=r['id'], uid=r['uid'], name=r['name'], created=r['created'], **export_payload(r['payload'])) for r in db.execute('SELECT * FROM plans ORDER BY id DESC')])
+
+def export_payload(raw):
+    payload=json.loads(raw)
+    payload.setdefault('schedule', [])
+    payload['items']=[dict(i, metadata=i.get('metadata', {})) for i in payload['items']]
+    return payload
 
 def estimates(idea, defaults=None):
     defaults = defaults or DEFAULTS
@@ -175,7 +190,7 @@ def schedule_entries(schedule):
             raise ValueError('Lazy Day blocks must be 30 or 60 minutes, at most one per day.')
     return schedule
 
-def schedule_totals(items, schedule, limits, defaults):
+def schedule_totals(items, schedule, limits, defaults, historical=False):
     caps, lazy = day_options(limits)
     schedule_entries(schedule)
     by_id = {i['id']: i for i in items}
@@ -184,6 +199,8 @@ def schedule_totals(items, schedule, limits, defaults):
         raise ValueError('Every idea must be assigned to exactly one day.')
     counts = {d: {c: 0 for c in CATEGORIES} for d in DAYS}
     for entry in placements:
+        if not discovery.eligible(by_id[entry['id']], entry['day'], limits, historical=historical):
+            raise ValueError('An event is expired or unavailable on this date. Choose its weekend or unlock it.')
         counts[entry['day']][by_id[entry['id']]['category']] += 1
     if any(counts[d][c] > caps[d][c] for d in DAYS for c in CATEGORIES):
         raise ValueError('Locked ideas exceed a daily category maximum. Raise it or unlock them.')
@@ -213,9 +230,12 @@ def generate(ideas, data, rng=None, defaults=None, currency='USD', currency_assu
     if energy not in ENERGY or type(count) is not int or not 1 <= count <= 6:
         raise ValueError('Choose an energy level and 1–6 suggestions.')
     caps, lazy = day_options(data)
+    discovery.weekend(data.get('weekend_date'))
     limits = dict(minutes=minutes, budget=budget, energy=energy, count=count)
     if 'day_caps' in data or 'include_lazy' in data:
         limits.update(day_caps=caps, include_lazy=lazy)
+    if data.get('weekend_date') is not None:
+        limits['weekend_date'] = data['weekend_date']
     locked, previous = data.get('locked', []), data.get('previous', [])
     if not isinstance(locked, list) or not isinstance(previous, list) or any(type(i) is not int for i in locked + previous):
         raise ValueError('Suggestion IDs must be whole numbers.')
@@ -256,7 +276,7 @@ def generate(ideas, data, rng=None, defaults=None, currency='USD', currency_assu
     rng.shuffle(pool); pool.sort(key=lambda i: i['id'] in previous)
     for idea in pool:
         duration, cost, _ = estimates(idea, defaults); cost_units = round(cost*100)
-        days = [d for d in DAYS if counts[d][idea['category']] < caps[d][idea['category']]]
+        days = [d for d in DAYS if counts[d][idea['category']] < caps[d][idea['category']] and discovery.eligible(idea,d,limits)]
         if len(chosen) < count and days and used_time+duration <= minutes and used_cost+cost_units <= round(budget*100):
             rng.shuffle(days); day = min(days,key=lambda d: day_time[d])
             chosen.append(idea); schedule.append(dict(id=idea['id'],kind='idea',day=day))
@@ -301,11 +321,12 @@ def validate_backup(text):
     if not isinstance(text, str) or len(text.encode('utf-8')) > MAX_BACKUP:
         raise ValueError('Choose a Weekend Grove JSON export smaller than 2 MiB.')
     data = strict_json(text)
-    if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] not in (1, 2, 3, 4):
-        raise ValueError('This is not a supported Weekend Grove export (version 1, 2, 3, or 4).')
+    if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] not in (1, 2, 3, 4, 5):
+        raise ValueError('This is not a supported Weekend Grove export (version 1, 2, 3, 4, or 5).')
     version = data['version']
     expected = {'version', 'ideas', 'plans'} | ({'defaults'} if version >= 2 else set())
     expected |= {'currency', 'currency_assumed'} if version >= 3 else set()
+    expected |= {'discovery'} if version >= 5 else set()
     if set(data) != expected:
         raise ValueError('Backup fields are missing or unsupported. No data was restored.')
     for field in ('ideas', 'plans'):
@@ -319,6 +340,7 @@ def validate_backup(text):
         raise ValueError('The backup currency assumption must be true or false.')
     idea_fields = {'id', 'title', 'category', 'duration', 'cost', 'location', 'energy', 'archived', 'sample'}
     idea_fields |= {'uid'} if version >= 2 else set()
+    idea_fields |= {'metadata'} if version >= 5 else set()
 
     def identity(record, kind):
         if type(record.get('id')) is not int or not 1 <= record['id'] <= 2**53 - 1:
@@ -339,7 +361,7 @@ def validate_backup(text):
         for flag in ('archived', 'sample'):
             if type(record[flag]) is not int or record[flag] not in (0, 1):
                 raise ValueError('Archive and demo flags must be 0 or 1.')
-        return dict(record, uid=identity(record, 'idea'))
+        return dict(record, uid=identity(record, 'idea'), metadata=discovery.clean_metadata(record.get('metadata', {})))
 
     ideas = [validate_idea(i) for i in data['ideas']]
     if len({i['id'] for i in ideas}) != len(ideas) or len({i['uid'] for i in ideas}) != len(ideas):
@@ -373,14 +395,14 @@ def validate_backup(text):
         if type(plan_assumed) is not bool:
             raise ValueError('A saved plan has an invalid currency assumption.')
         limits = row['limits']
-        if not isinstance(limits, dict) or set(limits) not in ({'minutes', 'budget', 'energy', 'count'}, {'minutes', 'budget', 'energy', 'count', 'day_caps', 'include_lazy'}):
+        if not isinstance(limits, dict) or (set(limits) - ({'weekend_date'} if version >= 5 else set())) not in ({'minutes', 'budget', 'energy', 'count'}, {'minutes', 'budget', 'energy', 'count', 'day_caps', 'include_lazy'}):
             raise ValueError('A saved plan has invalid limits.')
         # Validate limits separately: saved snapshots may refer to now-archived ideas.
         generate([], limits, defaults=defaults)
         schedule = row['schedule'] if version >= 4 else []
         schedule_entries(schedule)
         if schedule:
-            schedule_totals(items, schedule, limits, defaults)
+            schedule_totals(items, schedule, limits, defaults, historical=True)
         elif not items or 'day_caps' in limits:
             raise ValueError('A current plan requires an explicit day schedule.')
         total_minutes = sum(estimates(i, defaults)[0] for i in items) + sum(e['duration'] for e in schedule if e['kind']=='lazy')
@@ -393,21 +415,26 @@ def validate_backup(text):
         plans.append(dict(row, uid=uid, items=items, schedule=schedule, defaults=defaults, currency=plan_currency, currency_assumed=plan_assumed))
     if len({p['id'] for p in plans}) != len(plans) or len({p['uid'] for p in plans}) != len(plans):
         raise ValueError('The backup contains duplicate saved plans.')
-    return dict(ideas=ideas, plans=plans, defaults=settings, currency=currency, currency_assumed=assumed, digest=digest, version=version)
+    imported_discovery = discovery.validate_export(data['discovery'], clean_idea) if version >= 5 else None
+    if imported_discovery and any(r['idea_uid'] and r['idea_uid'] not in {i['uid'] for i in ideas} for r in imported_discovery['candidates']):
+        raise ValueError('A saved discovery refers to a missing idea.')
+    return dict(discovery=imported_discovery, ideas=ideas, plans=plans, defaults=settings, currency=currency, currency_assumed=assumed, digest=digest, version=version)
 
 def restore_summary(db, backup):
     ideas = {r['uid'] for r in db.execute('SELECT uid FROM ideas')}
     plans = {r['uid'] for r in db.execute('SELECT uid FROM plans')}
     new_ideas = sum(i['uid'] not in ideas for i in backup['ideas'])
     new_plans = sum(p['uid'] not in plans for p in backup['plans'])
-    return dict(ideas_to_add=new_ideas, plans_to_add=new_plans,
+    candidate_keys={r['key'] for r in db.execute('SELECT key FROM discovery_candidates')}
+    discovery_rows=(backup.get('discovery') or {}).get('candidates',[])
+    return dict(discovery_to_add=sum(r['key'] not in candidate_keys for r in discovery_rows), discovery_skipped=sum(r['key'] in candidate_keys for r in discovery_rows), ideas_to_add=new_ideas, plans_to_add=new_plans,
                 ideas_skipped=len(backup['ideas']) - new_ideas,
                 plans_skipped=len(backup['plans']) - new_plans,
                 defaults=backup['defaults'], currency=backup['currency'], currency_assumed=backup['currency_assumed'],
                 current_currency=currency_from(db)['currency'], currency_mismatch=backup['currency'] != currency_from(db)['currency'],
                 digest=backup['digest'], version=backup['version'])
 
-def restore_backup(db, backup, apply_defaults=False, acknowledge_relabel=False):
+def restore_backup(db, backup, apply_defaults=False, acknowledge_relabel=False, apply_discovery=False):
     """Called within one transaction. Stable IDs make v2 merges repeatable."""
     db.execute('BEGIN IMMEDIATE')
     summary = restore_summary(db, backup)
@@ -416,7 +443,7 @@ def restore_backup(db, backup, apply_defaults=False, acknowledge_relabel=False):
     existing = {r['uid']: r['id'] for r in db.execute('SELECT id,uid FROM ideas')}
     for row in sorted(backup['ideas'], key=lambda i: i['id']):
         if row['uid'] not in existing:
-            cursor = db.execute('INSERT INTO ideas(uid,title,category,duration,cost,location,energy,archived,sample) VALUES (:uid,:title,:category,:duration,:cost,:location,:energy,:archived,:sample)', row)
+            cursor = db.execute('INSERT INTO ideas(uid,title,category,duration,cost,location,energy,archived,sample,metadata) VALUES (:uid,:title,:category,:duration,:cost,:location,:energy,:archived,:sample,:metadata)', dict(row,metadata=json.dumps(row['metadata'])))
             existing[row['uid']] = cursor.lastrowid
     plans = {r['uid'] for r in db.execute('SELECT uid FROM plans')}
     for row in sorted(backup['plans'], key=lambda p: p['id']):
@@ -430,7 +457,8 @@ def restore_backup(db, backup, apply_defaults=False, acknowledge_relabel=False):
     if apply_defaults:
         db.execute("UPDATE settings SET value=? WHERE key='defaults'", (json.dumps(backup['defaults']),))
         set_currency(db, backup['currency'], backup['currency_assumed'])
-    return dict(summary, defaults_applied=apply_defaults)
+    discovery.restore(db, backup.get('discovery'), apply_discovery)
+    return dict(summary, defaults_applied=apply_defaults, discovery_preferences_applied=apply_discovery)
 
 class Handler(BaseHTTPRequestHandler):
     def allowed_host(self):
@@ -460,7 +488,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         static_types = {
             '/': 'text/html; charset=utf-8', '/app.js': 'text/javascript',
-            '/style.css': 'text/css', '/icon.svg': 'image/svg+xml',
+            '/discovery.js': 'text/javascript', '/style.css': 'text/css', '/icon.svg': 'image/svg+xml',
             '/favicon.ico': 'image/vnd.microsoft.icon', '/icon-32.png': 'image/png',
             '/apple-touch-icon.png': 'image/png', '/icon-192.png': 'image/png',
             '/icon-512.png': 'image/png', '/site.webmanifest': 'application/manifest+json',
@@ -470,6 +498,8 @@ class Handler(BaseHTTPRequestHandler):
             mime = static_types[path]
             return self.send((ROOT / 'static' / name).read_bytes(), content_type=mime)
         with connect() as db:
+            if path == '/api/discovery':
+                return self.send(discovery.view(db))
             if path in ('/api/state', '/api/export'):
                 value = export_state(db)
                 return self.send(value, filename='weekend-grove.json' if path.endswith('export') else None)
@@ -499,9 +529,15 @@ class Handler(BaseHTTPRequestHandler):
             data = strict_json(self.rfile.read(length))
             if not isinstance(data, dict):
                 raise ValueError('Expected a JSON object.')
+            if path == '/api/discovery/refresh':
+                return self.send({'started': discovery.launch(connect, manual=True)}, 202)
             reply = {'ok': True}
             with connect() as db:
-                if path == '/api/ideas':
+                if path == '/api/discovery/settings':
+                    reply = discovery.configure(db, data)
+                elif path == '/api/discovery/decision':
+                    reply = discovery.decide(db, data.get('key'), data.get('action'))
+                elif path == '/api/ideas':
                     idea = clean_idea(data)
                     if data.get('id') is not None:
                         cursor = db.execute('UPDATE ideas SET title=:title, category=:category, duration=:duration, cost=:cost, location=:location, energy=:energy, sample=0 WHERE id=:id', dict(idea, id=data['id']))
@@ -531,13 +567,13 @@ class Handler(BaseHTTPRequestHandler):
                     backup = validate_backup(data.get('backup_text'))
                     if path.endswith('/preview'):
                         return self.send(restore_summary(db, backup))
-                    if data.get('digest') != backup['digest'] or type(data.get('apply_defaults')) is not bool:
+                    if data.get('digest') != backup['digest'] or type(data.get('apply_defaults')) is not bool or type(data.get('apply_discovery',False)) is not bool:
                         raise ValueError('Preview this exact backup before restoring it.')
-                    reply = restore_backup(db, backup, data['apply_defaults'], data.get('acknowledge_relabel', False))
+                    reply = restore_backup(db, backup, data['apply_defaults'], data.get('acknowledge_relabel', False), data.get('apply_discovery', False))
                 elif path == '/api/generate':
                     if type(data.get('include_samples', True)) is not bool:
                         raise ValueError('Choose whether to include demo ideas.')
-                    ideas = [dict(r) for r in db.execute('SELECT * FROM ideas') if data.get('include_samples', True) or not r['sample']]
+                    ideas = [discovery.idea_row(r) for r in db.execute('SELECT * FROM ideas') if data.get('include_samples', True) or not r['sample']]
                     return self.send(generate(ideas, data, defaults=defaults_from(db), **currency_from(db)))
                 elif path == '/api/plans':
                     if not isinstance(data.get('name'), str):
@@ -548,7 +584,7 @@ class Handler(BaseHTTPRequestHandler):
                     ids = data.get('ids', [])
                     if not ids and not data.get('schedule'):
                         raise ValueError('Generate some suggestions before saving.')
-                    ideas = [dict(r) for r in db.execute('SELECT * FROM ideas')]
+                    ideas = [discovery.idea_row(r) for r in db.execute('SELECT * FROM ideas')]
                     if data.get('expected_items') is not None:
                         current = {i['id']: i for i in ideas}
                         snapshots = data['expected_items']
@@ -561,7 +597,7 @@ class Handler(BaseHTTPRequestHandler):
                             raise ValueError('Saved ideas must be available and distinct.')
                         limits = data.get('limits', {})
                         defaults = clean_defaults(data.get('defaults', defaults_from(db)))
-                        generate([], limits, defaults=defaults)
+                        limits = generate([], limits, defaults=defaults)['limits']
                         items = [selected[i] for i in ids]
                         minutes, cents = schedule_totals(items, data['schedule'], limits, defaults)
                         if not data['schedule']: raise ValueError('Generate a scheduled plan before saving.')
@@ -587,8 +623,12 @@ def main():
     parser.add_argument('--port', default=8765, type=int)
     args = parser.parse_args()
     initialize()
+    stop = discovery.start_scheduler(connect)
     print(f'Weekend Grove: http://{args.host}:{args.port}', flush=True)
-    ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
+    try:
+        ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
+    finally:
+        stop.set()
 
 if __name__ == '__main__':
     main()

@@ -86,7 +86,7 @@ class DayRestoreTests(unittest.TestCase):
         with server.connect() as db:
             self.assertEqual(server.export_state(db),source)
             self.assertEqual(server.restore_backup(db,backup)['plans_to_add'],0)
-        old=copy.deepcopy(self.source);old['version']=3
+        old=copy.deepcopy(self.source);test_app.strip_discovery(old);old['version']=3
         old['plans'][0].pop('schedule')
         legacy=server.validate_backup(json.dumps(old))
         self.assertEqual(legacy['plans'][0]['schedule'],[])
