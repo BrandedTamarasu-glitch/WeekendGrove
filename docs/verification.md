@@ -45,3 +45,7 @@ See [the installation/recovery plan](unraid.md), `.env.example`, and `compose.un
 - Production native Unraid container was not changed by this provider work and remains pinned to stable `0c571a7e082085d7d8680b5747dc76705e63b0b1`. No push, CI run, registry publication or new deployment occurred.
 - Docker is unavailable on this workstation. The updated Dockerfile copies the new adapter module, but the Discover image still needs a build and container verification before an approved production upgrade.
 - Before activation: user-operated account/terms and private-file key setup, approval of exact outbound data, and a controlled live check. Ticketmaster saved snapshots/backups still contain provider facts; their retention and any removal request must be addressed by the owner before enabling that provider. The 24-hour inbox policy is an implementation limit, not a claim of blanket legal permission.
+
+## Discover release preparation — October 5, 2026
+
+68 local tests passed with ResourceWarning treated as an error. The additional HTTP test places a dummy secret under the disposable data directory and verifies that direct/traversal paths return 404 and that state, JSON export, discovery status and the consistent SQLite backup do not contain it. The user-operated key snippet passes Bash syntax validation, masks input, disables tracing, uses a private temporary file and refuses to overwrite an existing destination. Publication checks found no tracked databases, secret files, personal idea/plan text, preview artifacts, or GitHub Actions workflows.

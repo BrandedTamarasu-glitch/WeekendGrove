@@ -193,3 +193,29 @@ class ProviderPersistenceTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+class SecretHTTPTests(unittest.TestCase):
+    import test_app as support
+    setUpClass=classmethod(support.IntegrationTests.setUpClass.__func__)
+    tearDownClass=classmethod(support.IntegrationTests.tearDownClass.__func__)
+    start=classmethod(support.IntegrationTests.start.__func__)
+    request=support.IntegrationTests.request
+
+    def test_secret_files_are_not_in_routes_exports_or_database_backup(self):
+        import urllib.request
+        import urllib.error
+        import sqlite3
+        from contextlib import closing
+        folder=Path(self.temp.name)/'secrets';folder.mkdir(mode=0o700)
+        secret=folder/'geoapify.key';marker=b'offline_secret_route_test_only';secret.write_bytes(marker);secret.chmod(0o600)
+        for route in ['/data/secrets/geoapify.key','/secrets/geoapify.key','/../data/secrets/geoapify.key','/%2e%2e/data/secrets/geoapify.key','/static/../data/secrets/geoapify.key','/api/backup/../secrets/geoapify.key']:
+            with self.assertRaises(urllib.error.HTTPError) as raised:urllib.request.urlopen(self.base+route)
+            self.assertEqual(raised.exception.code,404);self.assertNotIn(marker,raised.exception.read());raised.exception.close()
+        for route in ['/api/state','/api/export','/api/discovery','/api/backup']:
+            with urllib.request.urlopen(self.base+route) as response:body=response.read()
+            self.assertNotIn(marker,body)
+            if route=='/api/backup':
+                backup=Path(self.temp.name)/'download.sqlite3';backup.write_bytes(body)
+                with closing(sqlite3.connect(backup)) as db:
+                    self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
+                    self.assertNotIn(marker.decode(),'\n'.join(db.iterdump()))

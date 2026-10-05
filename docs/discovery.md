@@ -66,17 +66,31 @@ Production remains on the stable image; these steps are for a later explicitly a
 3. For example, run this yourself on that console. It hides input, does not put the value in shell history or a command argument, and uses the app's UID/GID. Do not screen-share or record key entry:
 
 ```bash
-install -d -m 700 -o 10001 -g 10001 /mnt/disk2/appdata/weekend-grove/secrets
-umask 077
-read -r -s -p 'Geoapify key: ' grove_geo_key
-printf '\n'
-printf '%s' "$grove_geo_key" > /mnt/disk2/appdata/weekend-grove/secrets/geoapify.key
-unset grove_geo_key
-chown 10001:10001 /mnt/disk2/appdata/weekend-grove/secrets/geoapify.key
-chmod 600 /mnt/disk2/appdata/weekend-grove/secrets/geoapify.key
+(
+  set +x
+  umask 077
+  grove_dir=/mnt/disk2/appdata/weekend-grove/secrets
+  [[ $EUID == 0 && -t 0 && ! -L "$grove_dir" ]] || exit 1
+  install -d -m 700 -o 10001 -g 10001 "$grove_dir" || exit 1
+  [[ ! -e "$grove_dir/geoapify.key" && ! -L "$grove_dir/geoapify.key" ]] || {
+    printf 'Key file already exists; nothing changed.\n'; exit 1;
+  }
+  grove_tmp=$(mktemp "$grove_dir/.geoapify.XXXXXXXX") || exit 1
+  trap 'unset grove_geo_key; rm -f -- "$grove_tmp"' EXIT
+  read -r -s -p 'Geoapify key: ' grove_geo_key || exit 1
+  printf '\n'
+  [[ $grove_geo_key =~ ^[A-Za-z0-9_-]{8,256}$ ]] || {
+    printf 'Key format was not accepted.\n'; exit 1;
+  }
+  printf '%s' "$grove_geo_key" > "$grove_tmp" || exit 1
+  unset grove_geo_key
+  chown 10001:10001 "$grove_tmp" && chmod 600 "$grove_tmp" || exit 1
+  ln -- "$grove_tmp" "$grove_dir/geoapify.key" || exit 1
+  printf 'Geoapify key file installed privately. Searches remain off.\n'
+)
 ```
 
-For Ticketmaster, repeat with `grove_ticket_key`, prompt `Ticketmaster key: ` and filename `ticketmaster.key`. Skip it if not enabling that provider. This command replaces only the named secret file; do not use it to overwrite a key you intend to keep.
+For Ticketmaster, repeat with `grove_ticket_key`, prompt `Ticketmaster key: ` and filename `ticketmaster.key`. Skip it if not enabling that provider. The snippet refuses an existing destination (including a symlink) and atomically links a new private file without replacing anything. It disables shell tracing before reading; input is masked, not entered as a shell command. It requires an interactive root Bash console. Do not run it in a recorded or shared terminal.
 
 4. In the native Unraid template for the approved new image, add a **Variable** named/keyed `GEOAPIFY_API_KEY_FILE`, value `/data/secrets/geoapify.key`. For Ticketmaster add `TICKETMASTER_API_KEY_FILE`, value `/data/secrets/ticketmaster.key`. These values are file paths, not secrets. Preserve all current Extra Parameters, image pinning, LAN binding, mount and security controls. The existing `/data` mount already includes these files; no additional bind or exposed port is needed. The app accepts only regular, non-symlink files owned by its UID with no group/other permissions, and rejects oversized or malformed keys.
 5. After the approved image update and scoped restart, Discover should say **key configured · permission off**. Review the exact outgoing data in Location & weekly refresh. Grant the global public-lookup permission and only the intended provider permission, save settings, then explicitly request the first refresh. Weekly refresh may remain off. Verify real provider behavior and quota before enabling any schedule.
