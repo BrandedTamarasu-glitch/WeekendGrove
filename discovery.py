@@ -328,6 +328,7 @@ def fetch(url, deadline=None):
     """Only built-in endpoints; resolve once, reject private IPs, pin TLS socket, no redirects."""
     part=urlsplit(url)
     allowed = ((part.hostname=='api.zippopotam.us' and re.fullmatch(r'/us/[0-9]{5}',part.path) and not part.query)
+               or (part.hostname=='api.open-meteo.com' and part.path=='/v1/forecast')
                or url==FEED_URL or provider_endpoint_allowed(part))
     if not allowed or part.scheme!='https' or part.username or part.password or part.port not in (None,443) or part.fragment:
         raise FetchError('The requested discovery endpoint is not allowed.')

@@ -9,6 +9,7 @@ import sqlite3
 import tempfile
 import uuid
 import discovery
+import weather
 from contextlib import closing
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -488,7 +489,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         static_types = {
             '/': 'text/html; charset=utf-8', '/app.js': 'text/javascript',
-            '/discovery.js': 'text/javascript', '/style.css': 'text/css', '/icon.svg': 'image/svg+xml',
+            '/weather.js': 'text/javascript', '/discovery.js': 'text/javascript', '/style.css': 'text/css', '/icon.svg': 'image/svg+xml',
             '/favicon.ico': 'image/vnd.microsoft.icon', '/icon-32.png': 'image/png',
             '/apple-touch-icon.png': 'image/png', '/icon-192.png': 'image/png',
             '/icon-512.png': 'image/png', '/site.webmanifest': 'application/manifest+json',
@@ -529,6 +530,8 @@ class Handler(BaseHTTPRequestHandler):
             data = strict_json(self.rfile.read(length))
             if not isinstance(data, dict):
                 raise ValueError('Expected a JSON object.')
+            if path == '/api/weather':
+                return self.send(weather.lookup(connect, data))
             if path == '/api/discovery/refresh':
                 return self.send({'started': discovery.launch(connect, manual=True)}, 202)
             reply = {'ok': True}
