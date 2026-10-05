@@ -16,3 +16,20 @@
 @media(max-width:600px){.discovery-form{grid-template-columns:1fr}.discovery-form button{width:100%}.discovery-coverage{padding:16px}.tabs{gap:17px}.tab{flex-shrink:0}#discovery-grid .card-actions .secondary{width:100%}}
 
 .privacy-note{max-width:70rem;margin:0 auto 2rem;padding:0 1rem;color:var(--muted);font-size:.85rem;line-height:1.6}.privacy-note summary{cursor:pointer}.privacy-note p{max-width:70ch}
+
+/* Weather stays distinct from saved planning snapshots. */
+.weather-panel {margin:2rem 0;padding:1.4rem;border:1px solid var(--line,#d7dfd3);border-radius:18px;background:#f4f7ef;}
+.weather-panel .section-head {margin-bottom:1rem;}
+.weather-inputs,.weather-days {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;}
+.weather-panel details {margin:1rem 0;}
+.weather-panel .inline-check {margin:1rem 0;}
+.weather-context {font-size:.85rem;color:#53604d;overflow-wrap:anywhere;}
+.weather-day {padding:1rem;background:#fffef9;border:1px solid #dce3d6;border-radius:14px;}
+.weather-day h3 {margin:0 0 1rem;}
+.weather-day h3 small {display:block;font:400 .85rem system-ui;margin-top:.3rem;color:#53604d;}
+.weather-metrics {display:flex;gap:1rem;justify-content:space-between;}
+.weather-metrics span {font-size:.8rem;color:#53604d;}
+.weather-metrics strong {display:block;font-size:1.3rem;font-weight:600;color:#293c2d;margin-top:.25rem;}
+@media(max-width:600px){.weather-inputs,.weather-days{grid-template-columns:1fr;}.weather-panel{padding:1rem;}.weather-panel input:not([type="checkbox"]){min-width:0;width:100%;}.weather-panel button{width:100%;}}
+
+.weather-panel input[type="checkbox"] {width:18px;min-width:18px;flex:0 0 18px;}
