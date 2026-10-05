@@ -70,4 +70,8 @@ docker build -t weekend-grove:deployment-review .
 python -W error::ResourceWarning tests/container_smoke.py --image weekend-grove:deployment-review
 ```
 
-The latest validation passed **34 tests**, including daily category maximums, locked day preservation, Lazy Day duration/quotas, no-match constraints, snapshot restart persistence, export/restore, currency handling, and host/origin protections. Desktop and narrow-phone browser checks passed. The Docker image built locally; this does not verify an Unraid deployment. See [verification evidence](docs/verification.md) and [ROADMAP.md](ROADMAP.md) for scope and remaining deployment checks.
+The stable planner validation passed **34 tests**, including daily category maximums, locked day preservation, Lazy Day duration/quotas, no-match constraints, snapshot restart persistence, export/restore, currency handling, and host/origin protections. Desktop and narrow-phone browser checks passed. The Docker image built locally; this does not verify an Unraid deployment. See [verification evidence](docs/verification.md) and [ROADMAP.md](ROADMAP.md) for scope and remaining deployment checks.
+
+## Discover (local review version)
+
+A Discover tab adds opt-in regional event suggestions with Save/Dismiss, configurable ZIP and radii, and dated planning. Public lookups and weekly refresh start off. The city calendar works without keys. Optional Geoapify restaurant/place and Ticketmaster family-event adapters are implemented locally, with separate permission switches and server-only keys. They remain inactive until user-operated setup and consent; no live credentialed lookup or production upgrade is claimed. See [setup, sources, privacy, migration and limitations](docs/discovery.md).

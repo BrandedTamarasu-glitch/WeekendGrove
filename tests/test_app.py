@@ -20,6 +20,13 @@ import server
 def idea(id, duration=60, cost=10, energy='low', archived=0):
     return dict(id=id, title=f'Generic idea {id}', category='Activities', duration=duration, cost=cost, energy=energy, archived=archived, sample=0, location='')
 
+
+def strip_discovery(data):
+    data.pop('discovery',None)
+    for i in data['ideas']:i.pop('metadata',None)
+    for p in data['plans']:
+        for i in p['items']:i.pop('metadata',None)
+
 class PlannerTests(unittest.TestCase):
     def setUp(self):
         self.limits = dict(minutes=180, budget=40, energy='medium', count=3)
@@ -175,7 +182,7 @@ class RestoreTests(unittest.TestCase):
 
     def test_legacy_v1_import(self):
         legacy = json.loads(self.text)
-        legacy['version']=1; legacy.pop('defaults')
+        strip_discovery(legacy); legacy['version']=1; legacy.pop('defaults')
         legacy.pop('currency'); legacy.pop('currency_assumed')
         for i in legacy['ideas']: i.pop('uid')
         for p in legacy['plans']:
@@ -396,7 +403,7 @@ class CurrencyTests(unittest.TestCase):
         with server.connect() as db: self.assertEqual(server.export_state(db),after)
 
     def test_legacy_v2_currency_is_explicitly_assumed(self):
-        data=json.loads(self.text); data['version']=2
+        data=json.loads(self.text); strip_discovery(data); data['version']=2
         for p in data['plans']: p.pop('schedule',None)
         data.pop('currency'); data.pop('currency_assumed')
         for plan in data['plans']: plan.pop('currency'); plan.pop('currency_assumed')

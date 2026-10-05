@@ -25,3 +25,27 @@ The optional `tests/container_smoke.py` passed against the built local app image
 Only temporary synthetic databases were used. Temporary containers/networks and files were removed after the tests. No real PC database was exported, copied, or changed. No Unraid access, plugin installation, monitoring, LAN/security configuration, registry image push, PR merge, or deployment occurred.
 
 See [the installation/recovery plan](unraid.md), `.env.example`, and `compose.unraid.yaml`. The actual Unraid version, architecture, healthy storage path, LAN interface/port, and Compose/template availability remain unverified deployment prerequisites. Local stopped-container backup recovery is tested; compatibility of an older image with a newer database schema is not assumed, and rollback requires the matching pre-upgrade image and data backup.
+
+## Discover local review — October 5, 2026
+
+- 54 local tests pass, including the original 34 checks. New checks cover ZIP/radius validation, DST scheduling, leases and catch-up, revoked permission, cached lookups, bounded HTTPS and redirect rejection, import validation, persistent Save/Dismiss, additive version 5 restore, migration safety copy, expired events, matching weekend dates and HTTP save rejection.
+- Python compilation, both JavaScript syntax checks and `git diff --check` pass. No CI workflow was added.
+- Actual bounded HTTPS client returned the generic ZIP lookup and the city Events feed successfully. Only these operationally verified providers are enabled; no household data was sent.
+- Browser checks at desktop and 390px width confirmed Save into the idea bank, Dismiss/history, a date-matching Saturday plan, saved source/date snapshots, settings without consent keeping refresh disabled, and persistence across the disposable preview restart. No page overflow at the tested phone width. This was browser emulation, not a physical phone test.
+- Production still uses the existing stable image. The separate authorized Docker metadata change kept the same image, mount, port and security settings; private before/after exports were equal and SQLite checks passed.
+- The Discover container image was not built here: Docker is not installed on this workstation. The Dockerfile adds distro timezone/certificate data; validate that build before production. See [provider disclosure and remaining limits](discovery.md).
+
+## Credentialed provider adapters — local only, October 5, 2026
+
+- **67 tests passed** with `python3 -W error::ResourceWarning -m unittest discover -s tests -q`. Python compilation, both JavaScript syntax checks and `git diff --check` passed.
+- New fixture tests cover Geoapify postcode matching and three-request limit; place category/radius/coordinate validation; Ticketmaster geohash, family classification, cancellation/date filters and one-page request bounds; keys without consent and consent without keys; revocation mid-refresh; redacted failures; private-file permissions/symlinks/oversized input; legacy settings gaining no new permission; 24-hour provider payload cleanup with decision retention; absent pending event facts; additive restore and preserved user edits.
+- No real API keys or credentialed live requests were used. Public provider documentation was read; operational availability, account entitlement and quota remain unverified.
+- Browser QA: local fixture preview at `http://127.0.0.1:8766`, phone viewport (375 CSS pixels reported) and normal desktop width. No document overflow at either width. Both providers display inactive with disabled permission switches; global lookups and weekly scheduling remain off. Saving settings succeeded without activation. Saving the generic museum and dismissing the generic ticketed event worked and survived a preview restart. Attribution links render on saved place cards and in Discover; no browser error logs were reported. This is emulation, not a physical phone test.
+- Screenshot evidence is local/ignored: `artifacts/provider-review/mobile-permissions.jpg` and `artifacts/provider-review/mobile-saved-place.jpg`.
+- Production native Unraid container was not changed by this provider work and remains pinned to stable `0c571a7e082085d7d8680b5747dc76705e63b0b1`. No push, CI run, registry publication or new deployment occurred.
+- Docker is unavailable on this workstation. The updated Dockerfile copies the new adapter module, but the Discover image still needs a build and container verification before an approved production upgrade.
+- Before activation: user-operated account/terms and private-file key setup, approval of exact outbound data, and a controlled live check. Ticketmaster saved snapshots/backups still contain provider facts; their retention and any removal request must be addressed by the owner before enabling that provider. The 24-hour inbox policy is an implementation limit, not a claim of blanket legal permission.
+
+## Discover release preparation — October 5, 2026
+
+68 local tests passed with ResourceWarning treated as an error. The additional HTTP test places a dummy secret under the disposable data directory and verifies that direct/traversal paths return 404 and that state, JSON export, discovery status and the consistent SQLite backup do not contain it. The user-operated key snippet passes Bash syntax validation, masks input, disables tracing, uses a private temporary file and refuses to overwrite an existing destination. Publication checks found no tracked databases, secret files, personal idea/plan text, preview artifacts, or GitHub Actions workflows.
