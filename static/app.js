@@ -50,7 +50,7 @@ function provenance(m) {
   if (!m?.source_url) return '';
   // Source URLs are validated at import; keep a second guard at rendering.
   let url; try {url = new URL(m.source_url); if (url.protocol !== 'https:') return '';} catch {return '';}
-  return `<div class="provenance"><p>${escape(m.range)} · about ${escape(m.distance_miles)} straight-line miles</p><p>${escape(m.start_date)}${m.end_date!==m.start_date?' – '+escape(m.end_date):''} · ${escape(m.time_label)}</p><a href="${escape(url.href)}" target="_blank" rel="noopener noreferrer">${escape(m.source_name)}</a><p>Checked ${escape(m.fetched_at.slice(0,10))}. ZIP-center estimate; confirm event details and suitability.</p></div>`;
+  return `<div class="provenance"><p>${escape(m.range)} · about ${escape(m.distance_miles)} straight-line miles</p><p>${m.start_date?escape(m.start_date)+(m.end_date!==m.start_date?' – '+escape(m.end_date):'')+' · ':''}${escape(m.time_label)}</p><a href="${escape(url.href)}" target="_blank" rel="noopener noreferrer">${escape(m.source_name)}</a>${m.source_id==='geoapify'?'<p>Places data: <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer">Geoapify</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></p>':''}<p>Checked ${escape(m.fetched_at.slice(0,10))}. ZIP-center estimate; confirm current details and suitability.</p></div>`;
 }
 function renderIdeas() {
   $('#idea-count').textContent = state.ideas.filter(i => !i.archived).length;

@@ -5,20 +5,23 @@ import http.client
 import ipaddress
 import json
 import math
+import os
 import re
 import queue
 import socket
 import ssl
+import stat
 import threading
 import time
 import uuid
 from datetime import date, datetime, time as clock_time, timedelta, timezone
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlencode, parse_qs
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULTS = dict(zip='', local_miles=30, day_trip_miles=100, include_day_trips=False,
-                timezone='America/Los_Angeles', weekday=3, time='08:00', consent=False, enabled=False)
-PREFERENCE_KEYS = set(DEFAULTS) - {'consent', 'enabled'}
+                timezone='America/Los_Angeles', weekday=3, time='08:00', consent=False, enabled=False, geoapify_consent=False, ticketmaster_consent=False)
+PERMISSION_KEYS = {'consent', 'enabled', 'geoapify_consent', 'ticketmaster_consent'}
+PREFERENCE_KEYS = set(DEFAULTS) - PERMISSION_KEYS
 SOURCE_ID = 'stanwood-events'
 SOURCE_NAME = 'City of Stanwood community events'
 SOURCE_URL = 'https://stanwoodwa.org/Calendar.aspx'
@@ -51,7 +54,7 @@ def clean_settings(data):
             raise ValueError('Distances must be whole miles from 1 to 150.')
     if data['day_trip_miles'] < data['local_miles']:
         raise ValueError('Day-trip distance must be at least the local distance.')
-    for key in ('enabled', 'consent', 'include_day_trips'):
+    for key in ('enabled', 'consent', 'include_day_trips', 'geoapify_consent', 'ticketmaster_consent'):
         if type(data[key]) is not bool:
             raise ValueError('Discovery switches must be true or false.')
     if type(data['weekday']) is not int or not 0 <= data['weekday'] <= 6:
@@ -98,7 +101,7 @@ def initialize(db):
 
 
 def settings_from(db):
-    return json.loads(db.execute("SELECT value FROM settings WHERE key='discovery'").fetchone()['value'])
+    return dict(DEFAULTS, **json.loads(db.execute("SELECT value FROM settings WHERE key='discovery'").fetchone()['value']))
 
 
 def configure(db, data):
@@ -123,7 +126,10 @@ def clean_metadata(value):
     link = urlsplit(value['source_url'])
     if link.scheme != 'https' or not link.hostname or link.username or link.password or link.port not in (None,443):
         raise ValueError('Source links must use public HTTPS URLs.')
-    if value['source_id'] != SOURCE_ID or value['source_name'] != SOURCE_NAME or not re.fullmatch(re.escape(SOURCE_URL)+r'\?EID=[0-9]{1,12}',value['source_url']):
+    city = value['source_id']==SOURCE_ID and value['source_name']==SOURCE_NAME and re.fullmatch(re.escape(SOURCE_URL)+r'\?EID=[0-9]{1,12}',value['source_url'])
+    place = value['source_id']=='geoapify' and value['source_name']=='Geoapify / OpenStreetMap' and re.fullmatch(r'https://www.openstreetmap.org/\?mlat=-?[0-9.]+&mlon=-?[0-9.]+',value['source_url'])
+    ticket = value['source_id']=='ticketmaster' and value['source_name']=='Ticketmaster' and link.hostname=='www.ticketmaster.com' and link.path.startswith('/') and not link.query and not link.fragment
+    if not (city or place or ticket):
         raise ValueError('Unknown discovery source.')
     stamp(value['fetched_at'])
     for key, low, high in [('latitude',-90,90),('longitude',-180,180),('distance_miles',0,30000)]:
@@ -131,6 +137,12 @@ def clean_metadata(value):
             raise ValueError('Invalid discovery coordinates or distance.')
     if value['range'] not in ('Local','Day trip'):
         raise ValueError('Invalid discovery distance label.')
+    if place:
+        if any(value[k] is not None for k in ('start_date','end_date','starts_at','ends_at')):
+            raise ValueError('Places do not have event dates.')
+        try:ZoneInfo(value['timezone'])
+        except (TypeError,ValueError,ZoneInfoNotFoundError):raise ValueError('Invalid place timezone.') from None
+        return dict(value)
     try:
         ZoneInfo(value['timezone'])
         start, end = date.fromisoformat(value['start_date']), date.fromisoformat(value['end_date'])
@@ -166,7 +178,7 @@ def weekend(value):
 
 def eligible(idea, day, limits, now=None, historical=False):
     meta = idea.get('metadata') or {}
-    if not meta:
+    if not meta or meta.get('source_id')=='geoapify':
         return True
     start = weekend(limits.get('weekend_date'))
     if start is None:
@@ -180,12 +192,24 @@ def eligible(idea, day, limits, now=None, historical=False):
 
 def expired(payload, now=None):
     m = payload['metadata']
+    if m['source_id']=='geoapify': return False
+    if m['source_id']=='ticketmaster' and (now or utcnow())-stamp(m['fetched_at'])>timedelta(hours=24): return True
     if m.get('ends_at') and stamp(m['ends_at']) <= (now or utcnow()):
         return True
     return date.fromisoformat(m['end_date']) < (now or utcnow()).astimezone(ZoneInfo(m['timezone'])).date()
 
 
+def prune_provider_cache(db, now=None):
+    now=now or utcnow()
+    for row in db.execute('SELECT key,payload FROM discovery_candidates').fetchall():
+        payload=json.loads(row['payload'])
+        if payload and payload['metadata']['source_id']=='ticketmaster' and now-stamp(payload['metadata']['fetched_at'])>=timedelta(hours=24):
+            # Keep only identity/decision, not an indefinite provider-content archive.
+            db.execute("UPDATE discovery_candidates SET payload='null' WHERE key=?",(row['key'],))
+
+
 def exported(db):
+    prune_provider_cache(db)
     return dict(preferences={k:v for k,v in settings_from(db).items() if k in PREFERENCE_KEYS},
                 candidates=[dict(r, payload=json.loads(r['payload'])) for r in db.execute('SELECT * FROM discovery_candidates ORDER BY key')])
 
@@ -193,7 +217,7 @@ def exported(db):
 def validate_export(value, clean_idea):
     if not isinstance(value, dict) or set(value) != {'preferences','candidates'} or not isinstance(value['preferences'],dict) or set(value['preferences']) != PREFERENCE_KEYS:
         raise ValueError('Invalid discovery backup.')
-    clean_settings(dict(value['preferences'], consent=False, enabled=False))
+    clean_settings(dict(value['preferences'], **{k:False for k in PERMISSION_KEYS}))
     rows = value['candidates']
     if not isinstance(rows,list) or len(rows)>MAX_CANDIDATES:
         raise ValueError('Too many discovery records in backup.')
@@ -212,6 +236,7 @@ def validate_export(value, clean_idea):
             raise ValueError('Saved discovery records require an idea identifier.')
         stamp(row['first_seen']); stamp(row['last_seen'])
         p=row['payload']
+        if p is None: continue  # Content-free deduplication/decision tombstone.
         if not isinstance(p,dict) or set(p) != {'title','category','duration','cost','energy','location','metadata'}:
             raise ValueError('Invalid discovery suggestion.')
         if clean_idea(p) != {k:v for k,v in p.items() if k!='metadata'}:
@@ -228,19 +253,22 @@ def restore(db, value, apply_preferences=False):
         db.execute('INSERT OR IGNORE INTO discovery_candidates VALUES (?,?,?,?,?,?)',
                    (r['key'],json.dumps(r['payload']),r['status'],r['idea_uid'],r['first_seen'],r['last_seen']))
     if apply_preferences:
-        configure(db, dict(value['preferences'], consent=False, enabled=False))
+        configure(db, dict(value['preferences'], **{k:False for k in PERMISSION_KEYS}))
 
 
 def view(db):
+    prune_provider_cache(db)
     settings = settings_from(db)
     rows=[]
     for r in db.execute('SELECT * FROM discovery_candidates ORDER BY last_seen DESC,key'):
-        row=dict(r);row['payload']=json.loads(row['payload']);row['expired']=expired(row['payload']);rows.append(row)
+        row=dict(r);row['payload']=json.loads(row['payload'])
+        if row['payload'] is None:continue
+        row['expired']=expired(row['payload']);rows.append(row)
     job=dict(db.execute('SELECT * FROM discovery_job WHERE id=1').fetchone())
     job['running']=bool(job['token'] and job['lease_until'] and stamp(job['lease_until']) > utcnow())
     job.pop('token');job.pop('lease_until');job.pop('id')
     return dict(settings=settings,candidates=rows,job=job,
-                coverage='Community events listed by the City of Stanwood only. Other regions, restaurants and places are not covered in this version. Empty results do not mean there is nothing nearby.')
+                providers=provider_status(settings), coverage='Optional Geoapify restaurants and places, Ticketmaster family-classified events, and the City of Stanwood calendar. Coverage is incomplete; empty results do not mean there is nothing nearby.')
 
 
 def decide(db, key, action):
@@ -251,6 +279,7 @@ def decide(db, key, action):
     if not row: raise ValueError('Suggestion no longer exists.')
     if row['status'] != 'pending': return dict(status=row['status'])
     p=json.loads(row['payload'])
+    if p is None:raise ValueError('Provider details expired. Refresh to check current suggestions.')
     if action=='save':
         if expired(p): raise ValueError('This event has ended. It cannot be added to future plans.')
         uid=str(uuid.uuid4())
@@ -266,11 +295,40 @@ class FetchError(ValueError):
     pass
 
 
+def provider_key(name):
+    # A private file avoids storing the secret itself in an Unraid template.
+    path=os.environ.get(name+'_FILE','')
+    if path:
+        try:
+            fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+            with os.fdopen(fd,'r',encoding='utf-8') as secret:
+                info=os.fstat(secret.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_size>257 or info.st_mode & 0o077 or info.st_uid!=os.geteuid():return ''
+                value=secret.read(257).strip()
+        except (OSError,UnicodeError):return ''
+    else:value=os.environ.get(name,'')
+    return value if re.fullmatch(r'[A-Za-z0-9_-]{8,256}',value) else ''
+
+
+def provider_status(settings):
+    return {name:dict(configured=bool(provider_key(env)), active=bool(provider_key(env) and settings['consent'] and settings.get(name+'_consent')))
+            for name,env in [('geoapify','GEOAPIFY_API_KEY'),('ticketmaster','TICKETMASTER_API_KEY')]}
+
+
+def provider_endpoint_allowed(part):
+    query=parse_qs(part.query)
+    if part.hostname=='api.geoapify.com' and part.path in ('/v1/geocode/search','/v2/places'):
+        return query.get('apiKey')==[provider_key('GEOAPIFY_API_KEY')] and bool(provider_key('GEOAPIFY_API_KEY'))
+    if part.hostname=='app.ticketmaster.com' and part.path=='/discovery/v2/events.json':
+        return query.get('apikey')==[provider_key('TICKETMASTER_API_KEY')] and bool(provider_key('TICKETMASTER_API_KEY'))
+    return False
+
+
 def fetch(url, deadline=None):
     """Only built-in endpoints; resolve once, reject private IPs, pin TLS socket, no redirects."""
     part=urlsplit(url)
     allowed = ((part.hostname=='api.zippopotam.us' and re.fullmatch(r'/us/[0-9]{5}',part.path) and not part.query)
-               or url==FEED_URL)
+               or url==FEED_URL or provider_endpoint_allowed(part))
     if not allowed or part.scheme!='https' or part.username or part.password or part.port not in (None,443) or part.fragment:
         raise FetchError('The requested discovery endpoint is not allowed.')
     timeout=min(12, max(0, (deadline or time.monotonic()+12)-time.monotonic()))
@@ -407,6 +465,7 @@ def apply_records(db,records,now):
 
 def claim(db, manual=False, now=None):
     now=now or utcnow();db.execute('BEGIN IMMEDIATE')
+    prune_provider_cache(db,now)
     settings=settings_from(db)
     if not settings['zip'] or not settings['consent']:
         if manual:raise ValueError('Save a ZIP and allow the disclosed public lookups before refreshing.')
@@ -433,20 +492,42 @@ def perform(connect,token,settings,getter=fetch):
                 if check.execute('SELECT token FROM discovery_job WHERE id=1').fetchone()['token'] != token or settings_from(check)!=settings:
                     raise FetchError('Refresh stopped because settings or permission changed.')
             return getter(url,limit)
-        with connect() as db:
-            origin=coordinates(settings['zip'],db,consent_checked_getter,deadline)
-            venue=coordinates(VENUE_ZIP,db,consent_checked_getter,deadline)
-        radius=settings['day_trip_miles'] if settings['include_day_trips'] else settings['local_miles']
-        if distance(origin,venue)>radius:
-            records=[];outcome='No supported event source within this range. Restaurants and places are not covered.'
-        else:
-            text=consent_checked_getter(FEED_URL,deadline)
-            records,skipped=calendar_records(text,origin,venue,settings)
-            outcome='City calendar checked. Suitability, prices and availability need confirmation on the source.'
+        records=[];messages=[];ticket_checked=False
+        from discovery_providers import geoapify_lookup, ticketmaster_lookup
+        geo_key=provider_key('GEOAPIFY_API_KEY');ticket_key=provider_key('TICKETMASTER_API_KEY')
+        origin=None
+        if settings.get('geoapify_consent') and geo_key:
+            try:
+                origin,new,missed=geoapify_lookup(settings,geo_key,consent_checked_getter,deadline)
+                records.extend(new);skipped+=missed;messages.append('Geoapify checked')
+            except Exception:messages.append('Geoapify unavailable; existing ideas are kept')
+        # The separately disclosed public ZIP service supports the city calendar and events.
+        try:
+            with connect() as db:
+                if origin is None:origin=coordinates(settings['zip'],db,consent_checked_getter,deadline)
+                venue=coordinates(VENUE_ZIP,db,consent_checked_getter,deadline)
+            radius=settings['day_trip_miles'] if settings['include_day_trips'] else settings['local_miles']
+            if distance(origin,venue)<=radius:
+                new,missed=calendar_records(consent_checked_getter(FEED_URL,deadline),origin,venue,settings)
+                records.extend(new);skipped+=missed;messages.append('City calendar checked')
+            else:messages.append('City calendar is outside this range')
+        except Exception:messages.append('City calendar or ZIP lookup unavailable')
+        if settings.get('ticketmaster_consent') and ticket_key and origin is not None:
+            try:
+                new,missed=ticketmaster_lookup(settings,origin,ticket_key,consent_checked_getter,deadline)
+                records.extend(new);skipped+=missed;ticket_checked=True;messages.append('Ticketmaster checked; inbox details expire after 24 hours')
+            except Exception:messages.append('Ticketmaster unavailable; existing ideas are kept')
+        outcome='; '.join(messages)+'. Confirm details and suitability on the source.'
         with connect() as db:
             db.execute('BEGIN IMMEDIATE')
             row=db.execute('SELECT token FROM discovery_job WHERE id=1').fetchone()
             if row['token']!=token or settings_from(db)!=settings:return
+            if ticket_checked:
+                current={key for key,payload in records if payload['metadata']['source_id']=='ticketmaster'}
+                for old in db.execute("SELECT key,payload FROM discovery_candidates WHERE status='pending'").fetchall():
+                    payload=json.loads(old['payload'])
+                    if payload and payload['metadata']['source_id']=='ticketmaster' and old['key'] not in current:
+                        db.execute("UPDATE discovery_candidates SET payload='null' WHERE key=?",(old['key'],))
             added=apply_records(db,records,utcnow().isoformat())
             if db.execute('SELECT COUNT(*) FROM discovery_candidates').fetchone()[0]>=MAX_CANDIDATES:
                 outcome+=' Inbox history limit reached; new entries were not added beyond the limit.'

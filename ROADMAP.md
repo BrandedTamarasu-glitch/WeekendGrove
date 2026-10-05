@@ -22,4 +22,4 @@ The reviewed configuration and private migration/recovery procedure are in [docs
 
 ## Discover local review
 
-The in-app inbox, configurable ZIP/radii, dated planning, persisted opt-in scheduler and version 5 recovery are implemented locally. The working source is the City of Stanwood community calendar. Restaurants/places need a validated no-cost provider; regional coverage remains explicit. See [discovery details](docs/discovery.md). Production deployment remains separate from source validation and local review.
+The in-app inbox, configurable ZIP/radii, dated planning, persisted opt-in scheduler and version 5 recovery are implemented locally. The working source is the City of Stanwood community calendar. Geoapify restaurant/place and Ticketmaster family-event adapters have offline tests and opt-in controls. User-operated keys, current account/terms review, live validation and an approved production image update remain; no paid plan or permanent free quota is assumed. See [discovery details](docs/discovery.md). Production deployment remains separate from source validation and local review.
