@@ -34,8 +34,10 @@ function renderDefaults() {
   $('#defaults-summary').textContent = defaultText(state.defaults);
   if (!defaultsDirty) for (const key of ['duration','cost','energy']) $('#defaults-form').elements[key].value = state.defaults[key];
 }
-function setView(view) {
-  for (const name of ['ideas','discover','planner','saved']) $(`#${name}-view`).hidden = name !== view;
+function setView(view, fromHistory = false) {
+  if(!['ideas','discover','planner','saved','settings'].includes(view))view='ideas';
+  if(!fromHistory && location.hash !== '#'+view)history.pushState(null,'','#'+view);
+  for (const name of ['ideas','discover','planner','saved','settings']) $(`#${name}-view`).hidden = name !== view;
   document.querySelectorAll('[data-view]').forEach(button => {const active = button.dataset.view === view; button.classList.toggle('active', active); if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');});
   const heading = $(`#${view}-view h2`); heading.tabIndex = -1; heading.focus();
 }
@@ -44,13 +46,13 @@ function metrics(idea, planning = false, defaults = initialDefaults, currency = 
   return `<div class="metrics"><span>${duration === null ? 'Time unknown' : duration + ' min' + (idea.duration === null ? ' · estimate' : '')}</span><span>${cost === null ? 'Cost unknown ('+currency+')' : money(cost,currency) + (idea.cost === null ? ' · estimate' : '')}</span><span>${energy ? escape(energy) + ' energy' + (!idea.energy ? ' · estimate' : '') : 'Energy unknown'}</span></div>`;
 }
 function card(idea, planning = false, defaults = initialDefaults, currency = state.currency) {
-  return `<div class="card-top"><span class="category-icon ${idea.category.toLowerCase()}" aria-hidden="true">${symbols[idea.category] || '✳'}</span><span class="category">${escape(idea.category)}</span>${idea.sample ? '<span class="sample">Generic demo</span>' : ''}</div><h3>${escape(idea.title)}</h3>${idea.location ? `<p class="location">${escape(idea.location)}</p>` : ''}${metrics(idea, planning, defaults, currency)}${provenance(idea.metadata)}`;
+  return `<div class="card-top"><span class="category-icon ${idea.category.toLowerCase()}" aria-hidden="true">${symbols[idea.category] || '✳'}</span><span class="category">${escape(idea.category)}</span>${idea.sample ? '<span class="sample">Generic demo</span>' : ''}</div>${planning?'<h4>':'<h3>'}${escape(idea.title)}${planning?'</h4>':'</h3>'}${idea.location ? `<p class="location">${escape(idea.location)}</p>` : ''}${metrics(idea, planning, defaults, currency)}${provenance(idea.metadata)}`;
 }
 function provenance(m) {
   if (!m?.source_url) return '';
   // Source URLs are validated at import; keep a second guard at rendering.
   let url; try {url = new URL(m.source_url); if (url.protocol !== 'https:') return '';} catch {return '';}
-  return `<div class="provenance"><p>${escape(m.range)} · about ${escape(m.distance_miles)} straight-line miles</p><p>${m.start_date?escape(m.start_date)+(m.end_date!==m.start_date?' – '+escape(m.end_date):'')+' · ':''}${escape(m.time_label)}</p><a href="${escape(url.href)}" target="_blank" rel="noopener noreferrer">${escape(m.source_name)}</a>${m.source_id==='geoapify'?'<p>Places data: <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer">Geoapify</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></p>':''}<p>Checked ${escape(m.fetched_at.slice(0,10))}. ZIP-center estimate; confirm current details and suitability.</p></div>`;
+  return `<details class="provenance"><summary>${escape(m.source_name)} · ${escape(m.range)} · ${escape(m.distance_miles)} mi</summary><p>${escape(m.range)} · about ${escape(m.distance_miles)} straight-line miles</p><p>${m.start_date?escape(m.start_date)+(m.end_date!==m.start_date?' – '+escape(m.end_date):'')+' · ':''}${escape(m.time_label)}</p><a href="${escape(url.href)}" target="_blank" rel="noopener noreferrer">${escape(m.source_name)}</a>${m.source_id==='geoapify'?'<p>Places data: <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer">Geoapify</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></p>':''}<p>Checked ${escape(m.fetched_at.slice(0,10))}. ZIP-center estimate; confirm current details and suitability.</p></details>`;
 }
 function renderIdeas() {
   $('#idea-count').textContent = state.ideas.filter(i => !i.archived).length;
@@ -60,8 +62,9 @@ function renderIdeas() {
   $('#demo-description').textContent = demos ? `${demos} generic demo ideas are available. Archive them to start with your own; your ideas and saved plans stay.` : 'Demo ideas are optional. Add your own ideas anytime; archived demos can be restored.';
   $('#category-filters').innerHTML = ['All', ...categories].map(c => `<button class="chip ${filter === c ? 'selected' : ''}" data-category="${c}" aria-pressed="${filter === c}">${c === 'All' ? 'All ideas' : c}</button>`).join('');
   const archived = $('#show-archived').checked;
-  const ideas = state.ideas.filter(i => Boolean(i.archived) === archived && (filter === 'All' || i.category === filter));
-  $('#idea-grid').innerHTML = ideas.length ? ideas.map(i => `<article class="idea-card ${i.archived ? 'archived' : ''}">${card(i)}<div class="card-actions"><button class="text-button" data-edit="${i.id}" aria-label="Edit ${escape(i.title)}">Edit</button><button class="text-button" data-archive="${i.id}" aria-label="${i.archived ? 'Restore' : 'Archive'} ${escape(i.title)}">${i.archived ? 'Restore' : 'Archive'}</button></div></article>`).join('') : `<div class="empty"><span aria-hidden="true">✳</span><h3>${archived ? 'No archived ideas here' : state.ideas.length ? 'A little room for more' : 'Every good weekend starts with an idea'}</h3><p>${archived ? 'Archived ideas can be restored whenever you want.' : 'Add an idea, or load the clearly labeled generic samples below.'}</p></div>`;
+  const query=$('#idea-search').value.trim().toLocaleLowerCase();
+  const ideas = state.ideas.filter(i => Boolean(i.archived) === archived && (filter === 'All' || i.category === filter) && (!query || (i.title+' '+i.location).toLocaleLowerCase().includes(query)));
+  $('#idea-grid').innerHTML = ideas.length ? ideas.map(i => `<article class="idea-card ${i.archived ? 'archived' : ''}">${card(i)}<div class="card-actions"><button class="text-button" data-edit="${i.id}" aria-label="Edit ${escape(i.title)}">Edit</button><button class="text-button" data-archive="${i.id}" aria-label="${i.archived ? 'Restore' : 'Archive'} ${escape(i.title)}">${i.archived ? 'Restore' : 'Archive'}</button></div></article>`).join('') : `<div class="empty"><span aria-hidden="true">✳</span><h3>${archived ? 'No archived ideas here' : state.ideas.length ? 'A little room for more' : 'Every good weekend starts with an idea'}</h3><p>${archived ? 'Archived ideas can be restored whenever you want.' : 'Add an idea, or load generic sample ideas in Settings.'}</p></div>`;
 }
 function openIdea(id) {
   const form = $('#idea-form'); form.reset(); form.querySelector('details').open = false;
@@ -84,10 +87,10 @@ function scheduleHTML(p, interactive = false) {
   return `<div class="weekend-days">${days.map(day=>{
     const entries = p.schedule.filter(e=>e.day===day);
     const total = entries.reduce((n,e)=>n+(e.kind==='lazy'?e.duration:(p.items.find(i=>i.id===e.id).duration ?? p.defaults.duration)),0);
-    return `<section class="day-section" aria-label="${day} plan"><div class="day-heading"><h3>${day}${p.limits.weekend_date?` <small>${escape(weekendDay(p.limits.weekend_date,day))}</small>`:''}</h3><span>${total} min planned</span></div>${entries.length?entries.map(e=>{
+    return `<section class="day-section" aria-label="${day} plan"><div class="day-heading"><h3>${day}${p.limits.weekend_date?` <small>${escape(weekendDay(p.limits.weekend_date,day))}</small>`:''}</h3><span>${total} min planned</span></div>${interactive?`<div class="plan-weather" data-plan-weather="${escape(p.limits.weekend_date?weekendDay(p.limits.weekend_date,day):'')}" aria-label="${day} weather" aria-live="polite">${window.GroveWeather?.card(p.limits.weekend_date?weekendDay(p.limits.weekend_date,day):'')||'Weather not checked.'}</div>`:''}<div class="day-activities">${entries.length?entries.map(e=>{
       const i=p.items.find(i=>i.id===e.id), label=e.kind==='lazy'?`Lazy Day time on ${day}`:i.title;
       return `<article class="idea-card plan-card ${locks.has(e.id)&&interactive?'locked':''} ${e.kind==='lazy'?'lazy-card':''}">${e.kind==='lazy'?`<p class="eyebrow">ROOM TO RELAX</p><h4>Lazy Day time</h4><p class="helper">Rest, wander, or leave this time open.</p><div class="metrics"><span>${e.duration} min</span><span>${money(0,p.currency)}</span><span>No category quota</span></div>`:card(i,true,p.defaults,p.currency)}${interactive?`<button class="lock-button" data-lock="${e.id}" aria-label="${locks.has(e.id)?'Unlock':'Lock'} ${escape(label)}" aria-pressed="${locks.has(e.id)}">${locks.has(e.id)?'● Locked · keep this':'○ Lock this suggestion'}</button>`:''}</article>`;
-    }).join(''):'<p class="day-empty">No suggestions on this day. Keep the space open.</p>'}</section>`;
+    }).join(''):'<p class="day-empty">No suggestions on this day. Keep the space open.</p>'}</div></section>`;
   }).join('')}</div>`;
 }
 function renderPlan() {
@@ -106,19 +109,23 @@ async function generate() {
     plan = next; renderPlan();
     const same = previous.length && previous.length === scheduledIds(plan).length && previous.every(id => scheduledIds(plan).includes(id));
     notify(same ? 'These ideas still fit best. Add more ideas for more variety, or unlock a suggestion.' : plan.schedule.length ? 'A little weekend possibility is ready. Lock anything you want to keep.' : 'No match within those limits. Your idea bank is safe.');
-    const heading = outHeading(); heading.tabIndex = -1; heading.focus();
+    const heading = outHeading(); heading.tabIndex = -1; heading.focus(); heading.scrollIntoView({block:'start'});
   } catch (error) { notify(error.message, true); }
   finally { busy = false; $('#generate').disabled = false; if ($('#reroll') && plan) $('#reroll').disabled = scheduledIds(plan).every(id => locks.has(id)); }
 }
 function outHeading() { return $('#plan-output h2') || $('#plan-output h3'); }
 function renderSaved() {
-  $('#saved-plans').innerHTML = state.plans.length ? state.plans.map(p => `<article class="saved-plan"><div class="saved-head"><div><p class="eyebrow">${escape(new Date(p.created).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}))}</p><h3>${escape(p.name)}</h3></div><span>${p.minutes} min · ${money(p.cost,p.currency)}</span></div><p class="helper">Snapshot estimates: ${escape(defaultText(p.defaults,p.currency))}.</p>${p.currency_assumed ? `<p class="helper">${p.currency} assumed for this older plan: original cost units were unspecified. Amounts were not converted.</p>` : ''}${scheduleHTML(p)}</article>`).join('') : '<div class="empty"><span aria-hidden="true">☀</span><h3>A good weekend is worth keeping</h3><p>Generate a plan, then give it a name to save it here.</p><button class="secondary" id="start-planning">Find a weekend</button></div>';
+  const opened=new Set([...document.querySelectorAll('.saved-plan[open]')].map(el=>el.dataset.saved));
+  const ordered=[...state.plans].sort((a,b)=>(b.limits.weekend_date||'').localeCompare(a.limits.weekend_date||'')||b.created.localeCompare(a.created));
+  $('#saved-plans').innerHTML=ordered.length?ordered.map(p=>`<details class="saved-plan" data-saved="${p.id}" ${opened.has(String(p.id))?'open':''}><summary class="saved-head"><span><span class="eyebrow">${p.limits.weekend_date?escape(p.limits.weekend_date)+' — '+escape(weekendDay(p.limits.weekend_date,'Sunday')):'Weekend dates not recorded'}</span><span class="saved-name">${escape(p.name)}</span><span class="saved-total">${p.minutes} min · ${money(p.cost,p.currency)}</span></span><span class="view-snapshot">View snapshot</span></summary><div class="snapshot-content"><p class="helper">Saved ${escape(new Date(p.created).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}))}. Snapshot estimates: ${escape(defaultText(p.defaults,p.currency))}. Forecasts are not stored.</p>${p.currency_assumed?`<p class="helper">${p.currency} assumed for this older plan. Amounts were not converted.</p>`:''}${scheduleHTML(p)}</div></details>`).join(''):'<div class="empty"><span aria-hidden="true">☀</span><h3>A good weekend is worth keeping</h3><p>Generate a plan, then give it a name to save it here.</p><button class="secondary" id="start-planning">Find a weekend</button></div>';
 }
 document.addEventListener('click', async event => {
   const button = event.target.closest('button'); if (!button) return;
   if (button.dataset.view) setView(button.dataset.view);
+  if (button.hasAttribute('data-weather-jump')) { setView('settings'); $('#weather-settings').open=true; const heading=$('#weather-heading'); heading.tabIndex=-1; heading.focus({preventScroll:true}); heading.scrollIntoView({block:'start'}); }
   if (button.id === 'dismiss-notice') {$('#notice').hidden = true; const heading = document.querySelector('main section:not([hidden]) h2'); if (heading) {heading.tabIndex = -1; heading.focus({preventScroll:true});}}
-  if (button.dataset.category) { filter = button.dataset.category; renderIdeas(); }
+  if (button.hasAttribute('data-plan-jump')) { setView('planner'); const heading=outHeading(); if(heading){heading.tabIndex=-1;heading.focus();heading.scrollIntoView({block:'start'});} }
+  if (button.dataset.category) { filter = button.dataset.category; renderIdeas(); document.querySelector(`[data-category="${filter}"]`).focus(); }
   if (button.id === 'add-idea') openIdea();
   if (button.dataset.edit) openIdea(Number(button.dataset.edit));
   if (['close-dialog','cancel-dialog'].includes(button.id)) $('#idea-dialog').close();
@@ -218,3 +225,18 @@ document.addEventListener('submit', async event => {
 const initialWeekend = new Date(); initialWeekend.setDate(initialWeekend.getDate()+(6-initialWeekend.getDay())%7);
 $('#planner-form').elements.weekend_date.value = `${initialWeekend.getFullYear()}-${String(initialWeekend.getMonth()+1).padStart(2,'0')}-${String(initialWeekend.getDate()).padStart(2,'0')}`;
 refresh().catch(error => notify('Could not load your idea bank. '+error.message,true));
+
+// Navigation is browser-history aware and never regenerates or saves a plan.
+window.addEventListener('popstate',()=>{if(location.hash!=='#workspace')setView(location.hash.slice(1),true);});
+window.addEventListener('hashchange',()=>{if(location.hash!=='#workspace')setView(location.hash.slice(1),true);});
+$('#idea-search').addEventListener('input',renderIdeas);
+function planningSummary(){
+  const f=$('#planner-form').elements;
+  const changed=days.some(d=>categories.some(c=>Number(f[`cap-${d}-${c}`].value)!==1));
+  $('#planning-options-summary').textContent=`${f.energy.options[f.energy.selectedIndex].text.split(' · ')[0]} energy · ${f.count.value} ideas${changed?' · custom caps':''}${$('#include-lazy').checked?' · Lazy Day':''}${!$('#include-samples').checked?' · no demos':''}`;
+}
+$('#planning-options').addEventListener('input',planningSummary);
+planningSummary();
+setView(location.hash.slice(1)||'ideas',true);
+
+document.addEventListener('toggle',event=>{if(event.target.matches('.saved-plan'))event.target.querySelector('.view-snapshot').textContent=event.target.open?'Close snapshot':'View snapshot';},true);
