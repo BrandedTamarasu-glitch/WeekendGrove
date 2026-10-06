@@ -9,8 +9,8 @@ Collect projects, restaurants, places and activities. Pick your limits, generate
 ## What you can do
 
 - **Ideas:** add a title and category, fill in details later, search/filter, edit and archive.
-- **Discover:** review incoming suggestions, save or dismiss them, and optionally schedule weekly refreshes for your ZIP and travel range.
-- **Plan:** set a shared weekend time/budget, energy ceiling, daily category caps and optional Lazy Day blocks. Lock and reroll suggestions.
+- **Discover:** review incoming suggestions, save or dismiss them, and optionally schedule weekly refreshes for your ZIP and travel range. Bounded local/day-trip sampling and conservative venue dedupe improve variety without rewriting decisions.
+- **Plan:** set a shared weekend time/budget, energy ceiling, daily category caps and optional Lazy Day blocks. Lock and reroll suggestions. Optional weather-aware Plan B offers explicit indoor swaps using your own labels and an existing fresh forecast.
 - **Saved:** keep dated snapshots that survive edits and restarts.
 - **Settings:** manage weather, discovery, estimates, currency, light/dark appearance and backups.
 
@@ -67,11 +67,12 @@ Local checks (no GitHub Actions required):
 ```sh
 python3 -W error::ResourceWarning -m unittest discover -s tests
 node tests/weather_view_test.cjs
+node tests/plan_b_view_test.cjs
 node tests/theme_test.cjs
 node tests/readability_test.cjs
 ```
 
-The current app passed 80 Python tests and these three JavaScript suites. A pinned image has also been built and checked on Unraid for health/restart/data preservation. Desktop and 320/390px browser layouts were checked; physical-phone coverage and universal platform support are not claimed. See [verification](docs/verification.md) and [roadmap](ROADMAP.md).
+This feature release passed 94 Python tests and the JavaScript suites above. A pinned image has also been built and checked on Unraid for health/restart/data preservation. Desktop and 320/390px browser layouts were checked; physical-phone coverage and universal platform support are not claimed. See [verification](docs/verification.md) and [roadmap](ROADMAP.md).
 
 ## License
 

@@ -2,7 +2,7 @@
 
 [Guide home](Home.md) · [Everyday use](Settings-and-everyday-use.md)
 
-Weather is optional and needs **no API key**. It adds condition text/icons and Fahrenheit high/low temperatures inside the generated Saturday/Sunday cards. It does not change the planner's suggestions.
+Weather is optional and needs **no API key**. It adds condition text/icons and Fahrenheit high/low temperatures inside the generated Saturday/Sunday cards. It never changes suggestions automatically. Optional [Plan B](Settings-and-everyday-use.md#optional-weather-aware-plan-b) uses a valid existing forecast to offer explicit indoor swaps, with configurable precipitation/condition triggers. Wind is not requested or used.
 
 1. Choose your weekend in **Plan** and generate a plan.
 2. Open **Settings → Weather**, or **Weather settings** on either day card.

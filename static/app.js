@@ -20,7 +20,7 @@ async function refresh() {
   // Keep an already-open browser usable while the local server is upgraded.
   state.currency ??= 'USD'; state.currency_assumed ??= true;
   state.plans.forEach(p => {p.currency ??= 'USD'; p.currency_assumed ??= true;});
-  renderIdeas(); renderSaved(); renderDefaults(); renderCurrency();
+  renderIdeas(); renderSaved(); renderDefaults(); renderCurrency(); window.GrovePlanB?.invalidate();
 }
 function defaultText(d, currency = state.currency) { return `${d.duration} min · ${money(d.cost,currency)} · ${d.energy} energy`; }
 function renderCurrency() {
@@ -46,13 +46,13 @@ function metrics(idea, planning = false, defaults = initialDefaults, currency = 
   return `<div class="metrics"><span>${duration === null ? 'Time unknown' : duration + ' min' + (idea.duration === null ? ' · estimate' : '')}</span><span>${cost === null ? 'Cost unknown ('+currency+')' : money(cost,currency) + (idea.cost === null ? ' · estimate' : '')}</span><span>${energy ? escape(energy) + ' energy' + (!idea.energy ? ' · estimate' : '') : 'Energy unknown'}</span></div>`;
 }
 function card(idea, planning = false, defaults = initialDefaults, currency = state.currency) {
-  return `<div class="card-top"><span class="category-icon ${idea.category.toLowerCase()}" aria-hidden="true">${symbols[idea.category] || '✳'}</span><span class="category">${escape(idea.category)}</span>${idea.sample ? '<span class="sample">Generic demo</span>' : ''}</div>${planning?'<h4>':'<h3>'}${escape(idea.title)}${planning?'</h4>':'</h3>'}${idea.location ? `<p class="location">${escape(idea.location)}</p>` : ''}${metrics(idea, planning, defaults, currency)}${provenance(idea.metadata)}`;
+  return `<div class="card-top"><span class="category-icon ${idea.category.toLowerCase()}" aria-hidden="true">${symbols[idea.category] || '✳'}</span><span class="category">${escape(idea.category)}</span>${idea.sample ? '<span class="sample">Generic demo</span>' : ''}</div>${planning?'<h4>':'<h3>'}${escape(idea.title)}${planning?'</h4>':'</h3>'}${idea.location ? `<p class="location">${escape(idea.location)}</p>` : ''}${metrics(idea, planning, defaults, currency)}${idea.environment?`<p class="environment-label">${escape({indoor:'Indoor · user label',outdoor:'Outdoor · user label',mixed:'Mixed indoor/outdoor · user label',unknown:'Indoor/outdoor unknown'}[idea.environment]||'Indoor/outdoor unknown')}</p>`:''}${provenance(idea.metadata)}`;
 }
 function provenance(m) {
   if (!m?.source_url) return '';
   // Source URLs are validated at import; keep a second guard at rendering.
   let url; try {url = new URL(m.source_url); if (url.protocol !== 'https:') return '';} catch {return '';}
-  return `<details class="provenance"><summary>${escape(m.source_name)} · ${escape(m.range)} · ${escape(m.distance_miles)} mi</summary><p>${escape(m.range)} · about ${escape(m.distance_miles)} straight-line miles</p><p>${m.start_date?escape(m.start_date)+(m.end_date!==m.start_date?' – '+escape(m.end_date):'')+' · ':''}${escape(m.time_label)}</p><a href="${escape(url.href)}" target="_blank" rel="noopener noreferrer">${escape(m.source_name)}</a>${m.source_id==='geoapify'?'<p>Places data: <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer">Geoapify</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></p>':''}<p>Checked ${escape(m.fetched_at.slice(0,10))}. ZIP-center estimate; confirm current details and suitability.</p></details>`;
+  return `<details class="provenance"><summary>${escape(m.source_name)} · ${escape(m.range)} · ${escape(m.distance_miles)} mi · checked ${escape(m.fetched_at.slice(0,10))}</summary><p>${escape(m.range)} · about ${escape(m.distance_miles)} straight-line miles</p><p>${m.start_date?escape(m.start_date)+(m.end_date!==m.start_date?' – '+escape(m.end_date):'')+' · ':''}${escape(m.time_label)}</p><a href="${escape(url.href)}" target="_blank" rel="noopener noreferrer">${escape(m.source_name)}</a>${m.source_id==='geoapify'?'<p>Places data: <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer">Geoapify</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></p>':''}<p>Checked ${escape(m.fetched_at.slice(0,10))}. ZIP-center estimate; confirm current details and suitability.</p></details>`;
 }
 function renderIdeas() {
   $('#idea-count').textContent = state.ideas.filter(i => !i.archived).length;
@@ -69,7 +69,7 @@ function renderIdeas() {
 function openIdea(id) {
   const form = $('#idea-form'); form.reset(); form.querySelector('details').open = false;
   const idea = state.ideas.find(i => i.id === id);
-  if (idea) { for (const key of ['id','title','category','duration','cost','location','energy']) form.elements[key].value = idea[key] ?? ''; form.querySelector('details').open = true; }
+  if (idea) { for (const key of ['id','title','category','duration','cost','location','energy','environment']) form.elements[key].value = idea[key] ?? (key==='environment'?'unknown':''); form.querySelector('details').open = true; }
   $('#dialog-title').textContent = idea ? 'Edit your idea' : 'Add an idea'; $('#form-error').hidden = true;
   $('#idea-estimates').textContent = `Blank details stay unknown. During planning, estimates are ${defaultText(state.defaults)}.${idea?.sample ? ' Editing a demo saves it as your own idea.' : ''}`;
   $('#idea-dialog').showModal(); form.elements.title.focus();
@@ -89,7 +89,7 @@ function scheduleHTML(p, interactive = false) {
     const total = entries.reduce((n,e)=>n+(e.kind==='lazy'?e.duration:(p.items.find(i=>i.id===e.id).duration ?? p.defaults.duration)),0);
     return `<section class="day-section" aria-label="${day} plan"><div class="day-heading"><h3>${day}${p.limits.weekend_date?` <small>${escape(weekendDay(p.limits.weekend_date,day))}</small>`:''}</h3><span>${total} min planned</span></div>${interactive?`<div class="plan-weather" data-plan-weather="${escape(p.limits.weekend_date?weekendDay(p.limits.weekend_date,day):'')}" aria-label="${day} weather" aria-live="polite">${window.GroveWeather?.card(p.limits.weekend_date?weekendDay(p.limits.weekend_date,day):'')||'Weather not checked.'}</div>`:''}<div class="day-activities">${entries.length?entries.map(e=>{
       const i=p.items.find(i=>i.id===e.id), label=e.kind==='lazy'?`Lazy Day time on ${day}`:i.title;
-      return `<article class="idea-card plan-card ${locks.has(e.id)&&interactive?'locked':''} ${e.kind==='lazy'?'lazy-card':''}">${e.kind==='lazy'?`<p class="eyebrow">ROOM TO RELAX</p><h4>Lazy Day time</h4><p class="helper">Rest, wander, or leave this time open.</p><div class="metrics"><span>${e.duration} min</span><span>${money(0,p.currency)}</span><span>No category quota</span></div>`:card(i,true,p.defaults,p.currency)}${interactive?`<button class="lock-button" data-lock="${e.id}" aria-label="${locks.has(e.id)?'Unlock':'Lock'} ${escape(label)}" aria-pressed="${locks.has(e.id)}">${locks.has(e.id)?'● Locked · keep this':'○ Lock this suggestion'}</button>`:''}</article>`;
+      return `<article class="idea-card plan-card ${locks.has(e.id)&&interactive?'locked':''} ${e.kind==='lazy'?'lazy-card':''}">${e.kind==='lazy'?`<p class="eyebrow">ROOM TO RELAX</p><h4>Lazy Day time</h4><p class="helper">Rest, wander, or leave this time open.</p><div class="metrics"><span>${e.duration} min</span><span>${money(0,p.currency)}</span><span>No category quota</span></div>`:card(i,true,p.defaults,p.currency)}${interactive?`<button class="lock-button" data-lock="${e.id}" aria-label="${locks.has(e.id)?'Unlock':'Lock'} ${escape(label)}" aria-pressed="${locks.has(e.id)}">${locks.has(e.id)?'● Locked · keep this':'○ Lock this suggestion'}</button>${e.kind==='idea'?`<div class="plan-b-slot" data-plan-b-slot="${e.id}"></div>`:''}`:''}</article>`;
     }).join(''):'<p class="day-empty">No suggestions on this day. Keep the space open.</p>'}</div></section>`;
   }).join('')}</div>`;
 }
@@ -97,16 +97,18 @@ function renderPlan() {
   const out = $('#plan-output');
   if (!plan.schedule?.length) {out.innerHTML='<div class="empty"><h3>No suggestions fit just yet</h3><p>Try more time or budget, raise a daily category maximum, or add another idea. Lazy Day blocks need at least 30 minutes.</p><button class="secondary" id="back-to-bank">Go to idea bank</button></div>';return;}
   const allLocked = scheduledIds(plan).every(id=>locks.has(id));
-  out.innerHTML = `<div class="plan-heading"><div><p class="eyebrow">A FEW GOOD POSSIBILITIES</p><h2>Your weekend, lightly planned</h2><p>${plan.minutes} of ${plan.limits.minutes} minutes · ${money(plan.cost,plan.currency)} of ${money(plan.limits.budget,plan.currency)}</p></div><button class="secondary" id="reroll" ${allLocked?'disabled':''}>${allLocked?'All suggestions locked':'↻ Reroll unlocked'}</button></div><p class="helper plan-estimates">Estimates used for unknown details: ${escape(defaultText(plan.defaults,plan.currency))}. Each estimated value is labeled.</p>${plan.currency_assumed?`<p class="helper">${plan.currency} assumed: original cost units were unspecified. Amounts were not converted.</p>`:''}${plan.currency!==state.currency?`<p class="helper">This preview keeps ${plan.currency}. Reroll to use the current ${state.currency} label; numeric costs are not converted.</p>`:''}${scheduleHTML(plan,true)}<p class="helper">${plan.items.length<plan.limits.count?'Fewer ideas fit these maximums; empty space is welcome. ':''}Time and budget are shared across both days. Locks preserve the suggestion and its day. Relaxation blocks use time, with no cost or category quota.</p><form id="save-plan" class="save-bar"><label for="plan-name">Keep this weekend</label><input id="plan-name" name="name" maxlength="120" placeholder="e.g. A slow October weekend" value="${escape(planName)}" required><button class="primary" type="submit">Save plan</button></form>`;
+  out.innerHTML = `<div class="plan-heading"><div><p class="eyebrow">A FEW GOOD POSSIBILITIES</p><h2>Your weekend, lightly planned</h2><p>${plan.minutes} of ${plan.limits.minutes} minutes · ${money(plan.cost,plan.currency)} of ${money(plan.limits.budget,plan.currency)}</p></div><button class="secondary" id="reroll" ${allLocked?'disabled':''}>${allLocked?'All suggestions locked':'↻ Reroll unlocked'}</button></div><p class="helper plan-estimates">Estimates used for unknown details: ${escape(defaultText(plan.defaults,plan.currency))}. Each estimated value is labeled.</p>${plan.currency_assumed?`<p class="helper">${plan.currency} assumed: original cost units were unspecified. Amounts were not converted.</p>`:''}${plan.currency!==state.currency?`<p class="helper">This preview keeps ${plan.currency}. Reroll to use the current ${state.currency} label; numeric costs are not converted.</p>`:''}${scheduleHTML(plan,true)}<p class="helper">${plan.items.length<plan.limits.count?'Fewer ideas fit these maximums; empty space is welcome. ':''}Time and budget are shared across both days. Locks preserve the suggestion and its day. Relaxation blocks use time, with no cost or category quota.</p><div id="plan-b-undo" class="plan-b-undo" aria-live="polite"></div><form id="save-plan" class="save-bar"><label for="plan-name">Keep this weekend</label><input id="plan-name" name="name" maxlength="120" placeholder="e.g. A slow October weekend" value="${escape(planName)}" required><button class="primary" type="submit">Save plan</button></form>`;
+  window.GrovePlanB?.paint();
 }
 async function generate() {
+  if(window.GrovePlanB?.isPending()){notify('Wait for the Plan B check to finish first.');return;}
   if (busy) return;
   busy = true; $('#generate').disabled = true; const reroll = $('#reroll'); if (reroll) reroll.disabled = true;
   try {
     const previous = plan ? scheduledIds(plan) : [];
     const next = await api('/api/generate', {...limits(), locked:[...locks], previous, previous_schedule:plan?.schedule || [], include_samples:$('#include-samples').checked});
     next.currency ??= state.currency; next.currency_assumed ??= state.currency_assumed;
-    plan = next; renderPlan();
+    window.GrovePlanB?.reset(); plan = next; renderPlan();
     const same = previous.length && previous.length === scheduledIds(plan).length && previous.every(id => scheduledIds(plan).includes(id));
     notify(same ? 'These ideas still fit best. Add more ideas for more variety, or unlock a suggestion.' : plan.schedule.length ? 'A little weekend possibility is ready. Lock anything you want to keep.' : 'No match within those limits. Your idea bank is safe.');
     const heading = outHeading(); heading.tabIndex = -1; heading.focus(); heading.scrollIntoView({block:'start'});
@@ -211,16 +213,18 @@ $('#planner-form').addEventListener('submit', event => {event.preventDefault(); 
 $('#planner-form').elements.weekend_date.addEventListener('change', () => { if (plan) {plan=null; locks.clear(); $('#plan-output').innerHTML='<p class="helper">Weekend changed. Generate a fresh plan for these dates.</p>'; } });
 $('#idea-form').addEventListener('submit', async event => {
   event.preventDefault(); const form = event.target, f = form.elements, submit = form.querySelector('[type="submit"]'); submit.disabled = true;
-  const data = {title:f.title.value, category:f.category.value, duration:f.duration.value === '' ? null : Number(f.duration.value), cost:f.cost.value === '' ? null : Number(f.cost.value), location:f.location.value, energy:f.energy.value || null};
+  const data = {title:f.title.value, category:f.category.value, duration:f.duration.value === '' ? null : Number(f.duration.value), cost:f.cost.value === '' ? null : Number(f.cost.value), location:f.location.value, energy:f.energy.value || null, environment:f.environment.value};
   if (f.id.value) data.id = Number(f.id.value);
   try {await api('/api/ideas',data); $('#idea-dialog').close(); await refresh(); notify('Idea saved. A little possibility for later.');}
   catch (error) {$('#form-error').textContent = error.message; $('#form-error').hidden = false;} finally {submit.disabled = false;}
 });
 document.addEventListener('submit', async event => {
   if (event.target.id !== 'save-plan') return;
-  event.preventDefault(); const submit = event.target.querySelector('button'); submit.disabled = true;
+  event.preventDefault();
+  if(busy||window.GrovePlanB?.isPending()){notify('Wait for the current plan change to finish before saving.');return;}
+  busy=true; const submit = event.target.querySelector('button'); submit.disabled = true;
   try {await api('/api/plans',{name:$('#plan-name').value, ids:plan.items.map(i => i.id), expected_items:plan.items, limits:plan.limits, schedule:plan.schedule, defaults:plan.defaults, currency:plan.currency, currency_assumed:plan.currency_assumed}); planName = ''; await refresh(); setView('saved'); notify('Weekend saved. You can come back to it anytime.');}
-  catch (error) {notify(error.message,true);} finally {submit.disabled = false;}
+  catch (error) {notify(error.message,true);} finally {busy=false;submit.disabled = false;}
 });
 const initialWeekend = new Date(); initialWeekend.setDate(initialWeekend.getDate()+(6-initialWeekend.getDay())%7);
 $('#planner-form').elements.weekend_date.value = `${initialWeekend.getFullYear()}-${String(initialWeekend.getMonth()+1).padStart(2,'0')}-${String(initialWeekend.getDate()).padStart(2,'0')}`;

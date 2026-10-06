@@ -56,6 +56,65 @@ class ProviderParserTests(unittest.TestCase):
         with self.assertRaises(d.FetchError):p.geoapify_lookup(SETTINGS,'dummy',lambda *a:json.dumps({'results':[dict(GEO['results'][0],postcode='00000')]}),time.monotonic()+10,NOW)
         with self.assertRaises(d.FetchError):p.geoapify_records({'features':PLACE['features']*21},'Places',ORIGIN,SETTINGS,NOW)
 
+    def test_geoapify_paging_directional_diversity_and_hard_bounds(self):
+        settings=dict(SETTINGS,include_day_trips=True);calls=[]
+        def getter(url,deadline):
+            q=parse_qs(urlsplit(url).query);calls.append(q)
+            if '/geocode/' in url:return json.dumps(GEO)
+            bias=tuple(map(float,q['bias'][0].split(':')[1].split(',')))[::-1]
+            far=bias!=ORIGIN;offset=int(q['offset'][0]);features=[]
+            for i in range(20):
+                coords=p.destination(bias,0.001*i,0) if far else p.destination(ORIGIN,1+i,0)
+                features.append(dict(properties=dict(place_id=f'{q["categories"]}-{bias}-{offset}-{i}',name=f'Example venue {offset+i}',formatted=f'{offset+i+1} Sample Road, Example City',lat=coords[0],lon=coords[1],categories=q['categories'][0].split(','))))
+            # Provider out-of-range records must never leak through our own filter.
+            features[-1]['properties']['lat']=0
+            return json.dumps(dict(features=features))
+        with patch.object(p.time,'sleep'):
+            _,records,skipped=p.geoapify_lookup(settings,'dummy',getter,time.monotonic()+60,NOW)
+        self.assertEqual(len(calls),13);self.assertEqual(len(records),40);self.assertEqual(skipped,12)
+        for category,_ in p.PLACE_GROUPS:
+            rows=[payload for _,payload in records if payload['category']==category]
+            self.assertEqual(sum(x['metadata']['range']=='Local' for x in rows),10)
+            self.assertEqual(sum(x['metadata']['range']=='Day trip' for x in rows),10)
+            self.assertTrue(all(x['metadata']['distance_miles']<=100 for x in rows))
+            outer=[x for x in rows if x['metadata']['range']=='Day trip']
+            self.assertTrue(any(x['metadata']['longitude']>ORIGIN[1] for x in outer))
+            self.assertTrue(any(x['metadata']['longitude']<ORIGIN[1] for x in outer))
+        self.assertEqual(sum(q.get('offset')==['20'] for q in calls),2)
+        calls.clear()
+        with patch.object(p.time,'sleep'):
+            _,rows,_=p.geoapify_lookup(SETTINGS,'dummy',getter,time.monotonic()+60,NOW)
+        self.assertEqual(len(calls),5);self.assertTrue(all(x['metadata']['range']=='Local' for _,x in rows))
+        calls.clear()
+        with patch.object(p.time,'sleep'):
+            _,rows,_=p.geoapify_lookup(dict(SETTINGS,include_day_trips=True,day_trip_miles=30),'dummy',getter,time.monotonic()+60,NOW)
+        self.assertEqual(len(calls),5);self.assertTrue(all(x['metadata']['range']=='Local' for _,x in rows))
+
+    def test_geoapify_scarce_daytrips_fill_local_slots_and_deadline_stops_calls(self):
+        calls=[]
+        def getter(url,deadline):
+            calls.append(url)
+            return json.dumps(GEO if '/geocode/' in url else PLACE)
+        with patch.object(p.time,'sleep'):
+            _,rows,_=p.geoapify_lookup(dict(SETTINGS,include_day_trips=True),'dummy',getter,time.monotonic()+60,NOW)
+        self.assertEqual(len(calls),11)
+        self.assertEqual(len(rows),1);self.assertEqual(rows[0][1]['metadata']['range'],'Local')
+        calls.clear()
+        with self.assertRaises(d.FetchError):
+            p.geoapify_lookup(SETTINGS,'dummy',getter,time.monotonic()-1,NOW)
+        self.assertEqual(calls,[])
+
+    def test_conservative_venue_aliases_not_branches_or_events(self):
+        one=p.geoapify_records(PLACE,'Places',ORIGIN,SETTINGS,NOW)[0][0][1]
+        one.update(title='Shima',category='Restaurants',location='Shima, 123 Example Street, Sample City')
+        two=copy.deepcopy(one);two.update(title='Shima Japanese Restaurant',location='Shima Japanese Restaurant, 123 Example St, Sample City')
+        self.assertTrue(d.same_venue(one,two))
+        for change in [dict(title='Other Japanese Restaurant'),dict(location='124 Example St, Sample City'),dict(location='123 Example St Suite 2, Sample City'),dict(location='Sample City')]:
+            self.assertFalse(d.same_venue(one,dict(two,**change)))
+        for change in [dict(latitude=34.2),dict(source_id='ticketmaster'),dict(start_date='2030-06-01')]:
+            self.assertFalse(d.same_venue(one,dict(two,metadata=dict(two['metadata'],**change))))
+        self.assertFalse(d.same_venue(dict(one,title='Japanese Restaurant'),dict(two,title='Japanese')))
+
     def test_ticketmaster_family_dates_bounds_and_provenance(self):
         records,skipped=p.ticketmaster_records(event_data(),ORIGIN,SETTINGS,NOW)
         self.assertEqual((len(records),skipped),(1,0));idea=records[0][1]
@@ -152,7 +211,7 @@ class ProviderPersistenceTests(unittest.TestCase):
             v=d.view(db);self.assertEqual(len(v['candidates']),2)
             source=server.export_state(db);self.assertNotIn('test_dummy',json.dumps(source));self.assertNotIn('test_dummy','\n'.join(db.iterdump()))
             self.assertNotIn('geoapify_consent',source['discovery']['preferences'])
-            self.assertEqual(server.validate_backup(json.dumps(source))['version'],5)
+            self.assertEqual(server.validate_backup(json.dumps(source))['version'],6)
             backup=server.validate_backup(json.dumps(source));d.restore(db,backup['discovery'],True)
             self.assertFalse(d.settings_from(db)['geoapify_consent']);self.assertFalse(d.settings_from(db)['ticketmaster_consent'])
     def test_revocation_prevents_subsequent_requests_and_writes(self):
@@ -182,6 +241,48 @@ class ProviderPersistenceTests(unittest.TestCase):
         server.DB=Path(self.temp.name)/'restore.sqlite3';server.initialize()
         with server.connect() as db:server.restore_backup(db,server.validate_backup(json.dumps(source)),apply_discovery=True)
         with server.connect() as db:self.assertEqual(server.export_state(db)['ideas'][0]['title'],'User title')
+    def test_venue_alias_preserves_original_identity_decisions_and_user_edits(self):
+        records,_=p.geoapify_records(PLACE,'Places',ORIGIN,SETTINGS,NOW)
+        key,payload=records[0];payload.update(title='Shima',category='Restaurants',location='123 Example Street, Sample City')
+        alias=copy.deepcopy(payload);alias['title']='Shima Japanese Restaurant'
+        with server.connect() as db:self.assertEqual(d.apply_records(db,[(key,payload),('a'*64,alias)],NOW.isoformat()),1)
+        with server.connect() as db:d.decide(db,key,'dismiss')
+        with server.connect() as db:
+            self.assertEqual(d.apply_records(db,[('b'*64,alias)],NOW.isoformat()),0)
+            row=db.execute('SELECT * FROM discovery_candidates').fetchone()
+            self.assertEqual((row['key'],row['status']),(key,'dismissed'))
+            # A separate branch is retained, including its original metadata.
+            branch=copy.deepcopy(payload);branch['location']='999 Example Street, Sample City'
+            self.assertEqual(d.apply_records(db,[('c'*64,branch)],NOW.isoformat()),1)
+        with server.connect() as db:d.decide(db,'c'*64,'save')
+        with server.connect() as db:
+            db.execute("UPDATE ideas SET title='My edited name'")
+            branch['title']='Shima Japanese Restaurant'
+            self.assertEqual(d.apply_records(db,[('d'*64,branch)],NOW.isoformat()),0)
+            self.assertEqual(db.execute('SELECT title FROM ideas').fetchone()[0],'My edited name')
+            export=server.export_state(db);server.validate_backup(json.dumps(export))
+            self.assertEqual(len(export['discovery']['candidates']),2)
+            # Preexisting duplicate rows are never silently deleted or rewritten.
+            db.execute("INSERT INTO discovery_candidates VALUES (?,?,'pending',NULL,?,?)",('e'*64,json.dumps(alias),NOW.isoformat(),NOW.isoformat()))
+            before=[tuple(row) for row in db.execute('SELECT * FROM discovery_candidates ORDER BY key')]
+            d.apply_records(db,[('f'*64,alias)],NOW.isoformat())
+            self.assertEqual(before,[tuple(row) for row in db.execute('SELECT * FROM discovery_candidates ORDER BY key')])
+
+    def test_pending_relocation_updates_alias_comparison_in_same_refresh(self):
+        key,payload=p.geoapify_records(PLACE,'Places',ORIGIN,SETTINGS,NOW)[0][0]
+        payload.update(title='Example Museum',location='123 Example Street, Sample City')
+        moved=copy.deepcopy(payload);moved['location']='999 Example Street, Sample City'
+        with server.connect() as db:
+            d.apply_records(db,[(key,payload)],NOW.isoformat())
+            # The new location supersedes old pending facts. A different provider
+            # ID at the old address is now a separate branch; a new-address alias
+            # is suppressed against the refreshed canonical entry.
+            self.assertEqual(d.apply_records(db,[(key,moved),('a'*64,payload),('b'*64,moved)],NOW.isoformat()),1)
+            rows={r['key']:json.loads(r['payload']) for r in db.execute('SELECT key,payload FROM discovery_candidates')}
+            self.assertEqual(set(rows),{key,'a'*64})
+            self.assertEqual(rows[key]['location'],moved['location'])
+            self.assertEqual(rows['a'*64]['location'],payload['location'])
+
     def test_successful_ticket_refresh_removes_missing_pending_facts(self):
         settings=dict(SETTINGS,geoapify_consent=True,ticketmaster_consent=True)
         self.run_job(settings)

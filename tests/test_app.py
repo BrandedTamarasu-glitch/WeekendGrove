@@ -23,9 +23,10 @@ def idea(id, duration=60, cost=10, energy='low', archived=0):
 
 def strip_discovery(data):
     data.pop('discovery',None)
-    for i in data['ideas']:i.pop('metadata',None)
-    for p in data['plans']:
-        for i in p['items']:i.pop('metadata',None)
+    # Versions 1–4 predate both discovery metadata (v5) and environment (v6).
+    for row in data['ideas'] + [i for p in data['plans'] for i in p['items']]:
+        row.pop('metadata', None)
+        row.pop('environment', None)
 
 class PlannerTests(unittest.TestCase):
     def setUp(self):

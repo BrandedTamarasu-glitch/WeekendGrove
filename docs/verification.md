@@ -1,5 +1,13 @@
 # Verification record
 
+## Discovery and Plan B — local review only
+
+94 Python tests and four JavaScript suites pass with ResourceWarnings treated as errors. Fixtures cover bounded Geoapify paging/directional diversity, alias false positives, preserved decisions/edits, moved venues, v6 migration/legacy restore, locked and duplicate swaps, time/budget/energy/category/date constraints and explicit undo. Pure weather-gate checks cover stale, mismatched, unavailable and unknown forecasts plus configurable thresholds. No provider or production requests were used.
+
+Browser fixture checks cover metadata edit cancellation, no-alternative fallback, repeated swap/undo, locks, cancelled offers, changed planning limits, consent revocation, simulated outages and expired forecasts. Wider source sampling can increase Geoapify usage to 5 local or 13 day-trip requests per refresh; this has not been exercised with live provider calls. Existing duplicate records are retained. Publication and deployment are pending review.
+
+Both palettes were checked at desktop, 390px and 320px widths for the planner and Discover. No horizontal overflow or undersized visible action buttons were found; browser console warnings/errors were absent. Delayed responses verified that reroll/save cannot race a pending Plan B operation. These checks used synthetic records and simulated weather on localhost, not a physical phone or the production database. Docker build and deployment verification remain pending for this feature branch.
+
 ## Current release — October 6, 2026
 
 The application tree released in PR #5 (`990d4b9221f690c1dfb5b5367b35b760b1305034`) passed 80 offline Python tests with ResourceWarning treated as an error, the weather/theme/readability JavaScript suites, syntax checks and whitespace checks. The exact image built successfully on Unraid; an isolated network-disabled smoke container verified migration and runtime restrictions, then exited 0. The native app became healthy after update and restart. Private before/after exports and discovery responses matched exactly; consistent database backups passed integrity checks. No household records or keys are included here.
