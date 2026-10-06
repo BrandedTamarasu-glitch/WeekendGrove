@@ -1,25 +1,16 @@
 # Weekend Grove roadmap
 
-## Implemented follow-up
+## Available now
 
-- **Configurable cost currency — implemented and verified.** USD default; USD, CAD, EUR, GBP, AUD, and NZD supported with symbols and codes. Selection relabels costs without changing stored amounts. Previews/saved plans retain snapshot currencies. Version 3 exports preserve labels; older imports and saved plans explicitly mark a USD assumption. Mismatched-currency restore requires acknowledgment. No conversion or exchange-rate APIs. See `docs/verification.md`.
+Ideas, discovery inbox and decisions, dated Saturday/Sunday planning, daily category maximums, optional Lazy Day blocks, locking/rerolls, saved snapshots, six currency labels, additive JSON restore and SQLite backup are implemented. The current workspace adds consolidated Settings, browser-local light/dark appearance and manual weather in day cards.
 
-- **Distinct day planning — implemented and verified.** Saturday/Sunday sections, separate per-day category maximums, optional 30/60-minute Lazy Day blocks, locked day preservation, and version 4 schedule snapshots/export. Legacy days stay unspecified. See `docs/verification.md`.
+Geoapify key-file setup has been checked on a running installation. The regional city calendar works without a key. Ticketmaster has offline tests, with operational and retention responsibilities that must be resolved before activation. See the [guide](docs/guide/Home.md).
 
-## Before eventual Unraid deployment
+## Next decisions
 
-The reviewed configuration and private migration/recovery procedure are in [docs/unraid.md](docs/unraid.md). Local checks run before pushes; GitHub Actions is intentionally not configured.
+- Plan deletion and a practical provider-content removal workflow.
+- Automatic backup scheduling and broader platform/physical-phone testing.
+- Wider event coverage without promising exhaustive or suitability-verified results.
+- A separately reviewed authentication/TLS/access design before any public hosting.
 
-- Verify host storage health before an explicitly authorized deployment.
-- Confirm the intended appdata bind mount, UID/GID 10001 permissions, backup/restore procedure, container health, and restart persistence on Unraid.
-- Test the actual phone on the home LAN after an explicitly authorized LAN-only configuration. The PC prototype remains localhost-only now.
-- Before any external access, review authentication, TLS, and access strategy. No credentials, router changes, or public exposure are configured by this prototype.
-
-## Later usability choices
-
-- Decide whether plan deletion and automatic backup scheduling are useful after trying the local prototype.
-- Final narrow-phone and JSON file-picker UI restore checks are complete after browser/connection recovery; no feature changes were needed to close those verification gaps.
-
-## Discover local review
-
-The in-app inbox, configurable ZIP/radii, dated planning, persisted opt-in scheduler and version 5 recovery are implemented locally. The working source is the City of Stanwood community calendar. Geoapify restaurant/place and Ticketmaster family-event adapters have offline tests and opt-in controls. User-operated keys, current account/terms review, live validation and an approved production image update remain; no paid plan or permanent free quota is assumed. See [discovery details](docs/discovery.md). Production deployment remains separate from source validation and local review.
+Each installation still needs its own healthy storage, permissions, backup and physical-device checks. No GitHub Actions, registry image publication or public hosting is configured.

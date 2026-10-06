@@ -1,4 +1,18 @@
-# Prototype verification
+# Verification record
+
+## Current release — October 6, 2026
+
+The application tree released in PR #5 (`990d4b9221f690c1dfb5b5367b35b760b1305034`) passed 80 offline Python tests with ResourceWarning treated as an error, the weather/theme/readability JavaScript suites, syntax checks and whitespace checks. The exact image built successfully on Unraid; an isolated network-disabled smoke container verified migration and runtime restrictions, then exited 0. The native app became healthy after update and restart. Private before/after exports and discovery responses matched exactly; consistent database backups passed integrity checks. No household records or keys are included here.
+
+Live desktop and 320/390px viewport checks covered navigation, theme persistence, generated unsaved day cards and Weather Settings/Return to Plan. No provider call was required for deployment validation. This is browser emulation, not an actual phone test. Source UI fixture checks cover forecast presentation, unknown/partial/stale cases, locks, filters, restore and both palettes.
+
+The documentation update adds source-build installation guides and an optional read-only provider-key Compose mount. The 80 Python tests and three JavaScript suites passed again. A fresh synthetic Python installation verified empty-by-default state, permissions off, generic sample loading, a consistent backup and exact export equality after restart. Standalone Docker Compose 5.6.0 validated base, provider and combined Unraid/provider configurations, including a single data mount, a separate read-only secrets mount and rejection of an unset secrets directory. Markdown links and shell-example syntax were checked. Docker is not available on the documentation workstation; this does not claim a new local Docker runtime test of the optional overlay.
+
+## Historical checks
+
+The entries below describe their original milestones. Their “not deployed” and “local only” statements are historical, superseded by the release summary above where applicable. They do not establish universal platform/provider support.
+
+# Original planner verification
 
 The current iteration passed **34 tests** with `python -W error::ResourceWarning -m unittest discover -s tests`. Python compilation, `node --check static/app.js`, and `docker compose config --quiet` passed. The local Docker image build also succeeded. Docker deployment and public hosting readiness are not claimed.
 

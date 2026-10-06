@@ -1,0 +1,14 @@
+# Optional private key files. No credentials belong in this file or .env.
+# Use with compose.yaml; also include compose.unraid.yaml for its data bind mount.
+services:
+  weekend-grove:
+    environment:
+      GEOAPIFY_API_KEY_FILE: /run/grove-secrets/geoapify.key
+      TICKETMASTER_API_KEY_FILE: /run/grove-secrets/ticketmaster.key
+    volumes:
+      - type: bind
+        source: "${GROVE_SECRETS_PATH:?Set GROVE_SECRETS_PATH to your existing private secrets directory}"
+        target: /run/grove-secrets
+        read_only: true
+        bind:
+          create_host_path: false
