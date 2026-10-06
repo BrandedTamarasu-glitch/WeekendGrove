@@ -489,7 +489,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         static_types = {
             '/': 'text/html; charset=utf-8', '/app.js': 'text/javascript',
-            '/weather.js': 'text/javascript', '/discovery.js': 'text/javascript', '/style.css': 'text/css', '/icon.svg': 'image/svg+xml',
+            '/theme.js': 'text/javascript', '/weather-view.js': 'text/javascript', '/weather.js': 'text/javascript', '/discovery.js': 'text/javascript', '/style.css': 'text/css', '/icon.svg': 'image/svg+xml',
             '/favicon.ico': 'image/vnd.microsoft.icon', '/icon-32.png': 'image/png',
             '/apple-touch-icon.png': 'image/png', '/icon-192.png': 'image/png',
             '/icon-512.png': 'image/png', '/site.webmanifest': 'application/manifest+json',

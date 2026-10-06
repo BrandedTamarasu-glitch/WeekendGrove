@@ -12,7 +12,10 @@ import discovery as d
 
 CACHE = {}
 LOCK = threading.Lock()
-FIELDS = ('temperature_2m_max', 'temperature_2m_min', 'precipitation_probability_max')
+FIELDS = ('temperature_2m_max', 'temperature_2m_min', 'precipitation_probability_max', 'weather_code')
+
+# WMO codes documented by Open-Meteo; unknown codes remain unknown.
+CODES = {0,1,2,3,45,48,51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,97,99}
 
 def number(value, low, high):
     return value if type(value) in (int, float) and math.isfinite(value) and low <= value <= high else None
@@ -37,7 +40,7 @@ def lookup(connect, request, getter=None, now=None):
     for offset, label in enumerate(('Saturday', 'Sunday')):
         date = start + timedelta(days=offset)
         status = 'past' if date < today else 'too_early' if date > today + timedelta(days=15) else 'unavailable'
-        days.append(dict(day=label, date=date.isoformat(), status=status, high=None, low=None, rain=None))
+        days.append(dict(day=label, date=date.isoformat(), status=status, high=None, low=None, rain=None, code=None))
     result = dict(zip=zip_code, timezone=zone, fetched_at=None, cached=False, days=days, status='outside_window')
     wanted = [day['date'] for day in days if day['status'] == 'unavailable']
     if not wanted: return result
@@ -66,9 +69,12 @@ def lookup(connect, request, getter=None, now=None):
                     values = daily.get(field, [])
                     return number(values[i], low, high) if isinstance(values,list) and i<len(values) else None
                 day.update(high=value(FIELDS[0],-150,150), low=value(FIELDS[1],-150,150), rain=value(FIELDS[2],0,100))
+                codes = daily.get('weather_code', [])
+                code = codes[i] if isinstance(codes,list) and i<len(codes) else None
+                day['code'] = code if units.get('weather_code') == 'wmo code' and type(code) is int and code in CODES else None
                 if day['high'] is not None and day['low'] is not None and day['low']>day['high']:
                     day.update(high=None,low=None)
-                values = [day[k] for k in ('high','low','rain')]
+                values = [day[k] for k in ('high','low','rain','code')]
                 day['status'] = 'available' if all(v is not None for v in values) else 'partial' if any(v is not None for v in values) else 'unavailable'
             result.update(fetched_at=now.isoformat(), status='complete')
             ttl = 3600

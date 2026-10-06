@@ -12,7 +12,7 @@ import weather as w
 
 NOW=datetime(2030,6,1,8,tzinfo=timezone.utc)
 REQUEST=dict(zip='90210',weekend_date='2030-06-01',timezone='America/Los_Angeles',consent=True)
-DATA=dict(timezone='America/Los_Angeles',daily_units=dict(zip(w.FIELDS,['°F','°F','%'])),daily=dict(time=['2030-06-01','2030-06-02'],temperature_2m_max=[74,70],temperature_2m_min=[56,54],precipitation_probability_max=[10,35]))
+DATA=dict(timezone='America/Los_Angeles',daily_units=dict(zip(w.FIELDS,['°F','°F','%','wmo code'])),daily=dict(time=['2030-06-01','2030-06-02'],temperature_2m_max=[74,70],temperature_2m_min=[56,54],precipitation_probability_max=[10,35],weather_code=[0,61]))
 
 class WeatherTests(unittest.TestCase):
     def setUp(self):
@@ -23,6 +23,14 @@ class WeatherTests(unittest.TestCase):
         if 'zippopotam' in url:return json.dumps({'places':[{'latitude':'34.09','longitude':'-118.4'}]})
         return json.dumps(DATA)
     def run_lookup(self,request=None,now=NOW,getter=None):return w.lookup(server.connect,request or REQUEST,getter or self.getter,now)
+    def test_weather_codes_are_requested_and_unknown_stays_unknown(self):
+        r=self.run_lookup();self.assertEqual([x['code'] for x in r['days']],[0,61])
+        self.assertIn('weather_code',parse_qs(urlsplit(self.calls[-1]).query)['daily'][0])
+        for invalid in [None,True,999,1.5,'0']:
+            w.CACHE.clear();data=copy.deepcopy(DATA);data['daily']['weather_code']=[invalid,invalid]
+            r=self.run_lookup(getter=lambda url,deadline:self.getter(url,deadline) if 'zippopotam' in url else json.dumps(data))
+            self.assertTrue(all(x['code'] is None and x['status']=='partial' for x in r['days']))
+
     def test_permission_validation_no_network(self):
         for changes in [dict(consent=False),dict(consent=1),dict(zip='123'),dict(timezone='../bad'),dict(weekend_date='2030-06-02'),dict(weekend_date=None)]:
             with self.assertRaises(ValueError):self.run_lookup(dict(REQUEST,**changes))

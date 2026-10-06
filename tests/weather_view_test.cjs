@@ -1,0 +1,27 @@
+const assert=require('node:assert/strict');
+const view=require('../static/weather-view.js');
+const now=Date.parse('2030-06-01T08:00:00Z');
+const data={zip:'90210',timezone:'America/Los_Angeles',fetched_at:new Date(now).toISOString(),days:[{date:'2030-06-01',status:'available',high:72,low:54,code:0},{date:'2030-06-02',status:'available',high:65,low:51,code:61}]};
+const c={data,zip:'90210',zone:'America/Los_Angeles',consent:true};
+const card=(date,ctx=c,time=now)=>view.card(date,ctx,time);
+assert.match(card('2030-06-01'),/Sunny/);assert.match(card('2030-06-02'),/Light rain/);
+assert.match(card('2030-06-01'),/High 72°F/);assert.match(card('2030-06-01'),/Low 54°F/);
+assert.match(card('2030-06-01'),/aria-hidden="true"/);
+assert.match(card('2030-06-01'),/outing destinations may differ/);
+assert.match(card('2030-06-01'),/Open-Meteo/);
+assert.match(card('2030-06-01',{...c,consent:false}),/allow weather lookups/);
+assert.doesNotMatch(card('2030-06-01',{...c,consent:false}),/72°F/);
+assert.match(card('2030-06-08'),/not checked for this date/);
+assert.match(card('2030-06-01',{...c,zip:'10001'}),/not checked for this ZIP/);
+assert.match(card('2030-06-01',{...c,zone:'America/New_York'}),/not checked for this ZIP/);
+assert.match(card('2030-06-01',c,now+3600000),/expired/);
+assert.match(card('2030-06-22'),/Too early/);assert.match(card('2030-05-25'),/Past date/);
+assert.match(card('2030-06-01',{...c,loading:true}),/Checking/);
+assert.match(card('2030-06-01',{...c,error:'<unavailable>'}),/&lt;unavailable&gt;/);
+const partial={...data,days:[{date:'2030-06-01',status:'partial',high:null,low:54,code:null}]};
+assert.match(card('2030-06-01',{...c,data:partial}),/Condition unknown/);
+assert.match(card('2030-06-01',{...c,data:partial}),/High unknown/);
+assert.match(card('2030-06-01',{...c,data:{...data,days:[{date:'2030-06-01',status:'unavailable'}]}}),/unavailable/);
+const original=JSON.stringify(data);card('2030-06-01');card('2030-06-02');assert.equal(JSON.stringify(data),original);
+assert.match(card('2030-06-01',c,Date.parse('2030-06-02T01:00:00Z')),/expired/); // Still Saturday Pacific, not a past-date forecast.
+console.log('Weather presentation checks passed (date/ZIP/timezone isolation, permission, expiry, partial data, condition mapping and immutability).');

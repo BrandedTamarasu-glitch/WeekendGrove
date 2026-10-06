@@ -1,6 +1,6 @@
 # Weekend weather
 
-The planner can request high/low temperature (Fahrenheit) and daily maximum precipitation probability for its selected Saturday and Sunday. “Rain chance” includes snow and other precipitation. It does not reroll, rank or exclude ideas. Weather is never included in saved plans, JSON exports or the database.
+The planner can request high/low temperature (Fahrenheit), a WMO daily condition code and daily maximum precipitation probability for its selected Saturday and Sunday. Generated day cards display high/low and a condition icon plus accessible text, alongside ZIP/date/retrieval context. Icons are decorative; condition text is always present. Weather location and permission live under **Settings → Weather**, reachable from each day card. The selected weekend remains in Plan. “Rain chance” includes snow and other precipitation. It does not reroll, rank or exclude ideas. Weather is never included in saved plans, JSON exports or the database.
 
 ## Provider research — October 5, 2026
 
@@ -25,3 +25,9 @@ A bounded, process-only cache holds at most 32 ZIP/timezone/weekend/local-today 
 Past dates show no forecast; dates beyond local today +15 days show “too early.” A partly eligible weekend can show one day and a fallback for the other. Missing/null/nonfinite/out-of-range values are unknown, never zero. A mismatched provider timezone or units fails closed. Calendar dates and ZoneInfo handle DST rather than adding a fixed 24-hour timestamp.
 
 The existing schema, saved data, discovery scheduler and native Unraid template are unchanged. No migration required. Docker copies the new weather module. Household weather lookups require the separate in-app permission and an explicit Check weather action.
+
+## Integrated day-card verification
+
+Open-Meteo’s documented WMO code mapping supplies sunny/cloudy/fog/drizzle/rain/snow/thunderstorm conditions, including freezing precipitation and hail. Unknown or missing codes show “Condition unknown”; they are never inferred from rain probability. The daily weather code represents the most severe condition of the day, not a promise of constant conditions.
+
+Only generated plans receive live weather slots. Rerolling, locking ideas and repeated generation reuse the current matching forecast without any automatic provider request. ZIP/timezone/date changes, permission revocation, and expiry clear or replace those slots. Saved plans intentionally have no live weather and never store it. The pure presentation test runs with `node tests/weather_view_test.cjs`; the Python suite covers the provider code contract and unknown-code handling.
