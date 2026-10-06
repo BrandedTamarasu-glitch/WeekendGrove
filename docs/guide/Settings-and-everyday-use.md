@@ -4,7 +4,7 @@
 
 ## Your first weekend
 
-1. In **Ideas**, choose **Add an idea**. A title and category are enough. Optional duration, cost, location and energy make planning more useful. Search by title/location or filter by category; archive things you no longer want suggested.
+1. In **Ideas**, choose **Add an idea**. A title and category are enough. Optional duration, cost, location and energy make planning more useful. Set Indoor, Outdoor, Mixed or Unknown yourself; the app does not infer it from a name or category. Search by title/location or filter by category; archive things you no longer want suggested.
 2. In **Plan**, select a Saturday, your total weekend time and budget. Open **More planning options** for energy, number of ideas, daily category caps and optional Lazy Day blocks.
 3. Choose **Find my weekend**. Saturday and Sunday share the total time and budget. Lock anything to keep, then reroll the rest. Fewer ideas can be a valid result; the planner does not fill every slot or optimize the fullest plan.
 4. Name it and **Save plan**. **Saved** holds snapshots, so later edits to ideas do not rewrite an earlier weekend. Unsaved previews are temporary. Plan deletion is not implemented.
@@ -41,3 +41,13 @@ Changing ZIP affects future refreshes. Existing saved ideas and inbox history ke
 ![Settings in dark mode, generic demo only](../images/settings-current-mobile.png)
 
 This example uses generic samples, a blank ZIP and disabled weekly refresh.
+
+## Optional weather-aware Plan B
+
+In **Plan → Weather-aware Plan B**, opt in and choose a 40%, 60% (default) or 80% precipitation trigger. You can separately include forecast rain, snow or storm conditions. These preferences last only for the page session. Wind is not used.
+
+Check weather manually as usual. For outdoor/mixed suggestions, a fresh matching ZIP/date/timezone forecast can show a reason to consider an indoor alternative. Choose **Find indoor alternative**, then explicitly **Swap to** an idea. Nothing changes automatically. Only ideas you labeled Indoor are offered, and each must fit the same day, time/budget, energy, daily category caps, duplicates and Lazy Day time. A locked target must be unlocked first. Changed planning limits require regeneration/reroll before a swap.
+
+**Keep current idea** cancels; **Undo last swap** explicitly restores the previous idea if it is still available and fits. Unlock a replacement before undoing. Swaps affect only the unsaved preview; save it when ready. Existing historical plans remain unchanged. No feasible alternative is a normal result—add an indoor idea or keep the plan.
+
+No extra provider lookup is made by Plan B. Outages, revoked permission, wrong ZIP/date/timezone and forecasts aged one hour or more block new advice. Unknown weather does not mean safe weather. ZIP-area forecasts may differ at a day-trip destination, and an Indoor label is not a guarantee of accessibility or suitability.

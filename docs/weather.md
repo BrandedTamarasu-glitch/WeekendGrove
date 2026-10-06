@@ -31,3 +31,7 @@ The existing schema, saved data, discovery scheduler and native Unraid template 
 Open-Meteo’s documented WMO code mapping supplies sunny/cloudy/fog/drizzle/rain/snow/thunderstorm conditions, including freezing precipitation and hail. Unknown or missing codes show “Condition unknown”; they are never inferred from rain probability. The daily weather code represents the most severe condition of the day, not a promise of constant conditions.
 
 Only generated plans receive live weather slots. Rerolling, locking ideas and repeated generation reuse the current matching forecast without any automatic provider request. ZIP/timezone/date changes, permission revocation, and expiry clear or replace those slots. Saved plans intentionally have no live weather and never store it. The pure presentation test runs with `node tests/weather_view_test.cjs`; the Python suite covers the provider code contract and unknown-code handling.
+
+## Optional Plan B in local review
+
+User-set Indoor/Outdoor/Mixed/Unknown labels and explicit indoor swaps use only an existing valid forecast. No wind field or extra lookup is added. See [Plan B behavior and limits](guide/Settings-and-everyday-use.md#optional-weather-aware-plan-b). Unlike the original weather-only release, this feature adds a version 6 idea column with a pre-migration safety backup; historical saved items are not retroactively labeled.

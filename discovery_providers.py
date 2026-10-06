@@ -61,19 +61,57 @@ def geoapify_records(data,category,origin,settings,now=None):
     return records,skipped
 
 
+def destination(origin, miles, bearing):
+    """Great-circle sampling point, including polar/dateline-safe longitude."""
+    lat,lon=map(math.radians,origin);angle=miles/3958.7613;bearing=math.radians(bearing)
+    result=math.asin(math.sin(lat)*math.cos(angle)+math.cos(lat)*math.sin(angle)*math.cos(bearing))
+    longitude=lon+math.atan2(math.sin(bearing)*math.sin(angle)*math.cos(lat),math.cos(angle)-math.sin(lat)*math.sin(result))
+    return math.degrees(result),(math.degrees(longitude)+180)%360-180
+
+
 def geoapify_lookup(settings,key,getter,deadline,now=None):
-    # Three requests maximum: US ZIP geocode and two separate category groups (20 each).
+    # https://apidocs.geoapify.com/docs/places/: circle bounds, proximity ranking,
+    # limit/offset paging. Maximum 5 requests local-only; 13 with day trips:
+    # ZIP + 2 groups * (up to 2 local pages + 4 directional outer samples).
+    # Samples are deliberately incomplete, never exhaustive area enumeration.
     geo=request_json('https://api.geoapify.com/v1/geocode/search',dict(text=settings['zip'],type='postcode',filter='countrycode:us',format='json',limit=1,apiKey=key),getter,deadline)
     results=geo.get('results',[])
     if not isinstance(results,list) or len(results)!=1:raise d.FetchError('ZIP lookup returned no unique supported location.')
     p=results[0]
     if p.get('country_code')!='us' or p.get('postcode')!=settings['zip']:raise d.FetchError('ZIP lookup did not match the requested US ZIP.')
     origin=point(p['lat'],p['lon']);records=[];skipped=0
+    trips=settings['include_day_trips'] and settings['day_trip_miles']>settings['local_miles']
     for category,categories in PLACE_GROUPS:
-        # 2/sec maximum; no retries, pagination, or automatic detail calls.
-        time.sleep(0.51)
-        data=request_json('https://api.geoapify.com/v2/places',dict(categories=categories,filter=f'circle:{origin[1]},{origin[0]},{round(radius(settings)*1609.344)}',bias=f'proximity:{origin[1]},{origin[0]}',limit=20,apiKey=key),getter,deadline)
-        new,missed=geoapify_records(data,category,origin,settings,now);records.extend(new);skipped+=missed
+        local=[];outer=[];seen=set()
+        def collect(bias,miles,offset=0,day_trip=False):
+            nonlocal skipped
+            time.sleep(0.51)  # No retries/detail calls; the shared deadline still applies.
+            data=request_json('https://api.geoapify.com/v2/places',dict(categories=categories,filter=f'circle:{origin[1]},{origin[0]},{round(miles*1609.344)}',bias=f'proximity:{bias[1]},{bias[0]}',limit=20,offset=offset,apiKey=key),getter,deadline)
+            new,missed=geoapify_records(data,category,origin,settings,now);skipped+=missed
+            for identity,payload in new:
+                distance=d.distance(origin,(payload['metadata']['latitude'],payload['metadata']['longitude']))
+                if identity in seen or distance>miles or (day_trip and distance<=settings['local_miles']):continue
+                if any(d.same_venue(payload,other) for _,other in local+outer):continue
+                seen.add(identity);(outer if day_trip else local).append((identity,payload))
+            return len(data['features'])
+        if collect(origin,settings['local_miles'])==20:
+            collect(origin,settings['local_miles'],20)
+        if trips:
+            middle=(settings['local_miles']+settings['day_trip_miles'])/2
+            # Round-robin one result per direction before taking a second: dense
+            # neighborhoods in the first quadrant cannot consume the whole quota.
+            directional=[]
+            for bearing in (0,90,180,270):
+                start=len(outer)
+                collect(destination(origin,middle,bearing),settings['day_trip_miles'],day_trip=True)
+                directional.append(outer[start:])
+            outer=[bucket[index] for index in range(20) for bucket in directional if len(bucket)>index]
+        # Reserve half the 20 slots for each band when both have results; fill
+        # unused capacity from the other. Never expand a user's radius.
+        selected=local[:10]+outer[:10] if trips else local[:20]
+        chosen={key for key,_ in selected}
+        selected.extend(item for item in local+outer if item[0] not in chosen)
+        records.extend(selected[:20])
     return origin,records,skipped
 
 

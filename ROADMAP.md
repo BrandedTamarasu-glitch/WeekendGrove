@@ -14,3 +14,7 @@ Geoapify key-file setup has been checked on a running installation. The regional
 - A separately reviewed authentication/TLS/access design before any public hosting.
 
 Each installation still needs its own healthy storage, permissions, backup and physical-device checks. No GitHub Actions, registry image publication or public hosting is configured.
+
+## Discovery and Plan B
+
+Discovery diversity and conservative venue dedupe, plus optional weather-aware Plan B with user-set indoor/outdoor labels, are implemented. Next in the requested order: portable itinerary, automatic backups, then completed-weekend feedback. Those later items are not part of this change.

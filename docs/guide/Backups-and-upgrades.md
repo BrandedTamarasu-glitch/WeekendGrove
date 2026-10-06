@@ -8,7 +8,7 @@ Your data is the most important part of the installation. Keep a fresh private b
 
 Open **Settings → Backups & sample ideas**:
 
-- **Export JSON** downloads portable version 5 data: ideas, archive/demo state, saved snapshots, estimates/currency, discovery preferences and Save/Dismiss decisions.
+- **Export JSON** downloads portable version 6 data: ideas, archive/demo state, saved snapshots, estimates/currency, discovery preferences, Save/Dismiss decisions and user-set indoor/outdoor labels.
 - **Database backup** downloads a transaction-consistent SQLite copy, including operational state and ZIP caches. Use this button rather than copying a live database file by itself.
 
 Keep both before an upgrade, labeled with the date and current image/source commit. Backups contain your entered information. Never attach them to a public issue. Provider key files are excluded from both formats; protect them separately if you need to preserve them. A copy of the whole `/data` directory can include secrets, so do not treat it like a public diagnostic bundle.
@@ -21,7 +21,7 @@ Keep both before an upgrade, labeled with the date and current image/source comm
 4. If currencies differ, explicitly acknowledge relabeling; numbers are never converted.
 5. Choose **Add missing records**, then verify your ideas, saved snapshots and settings.
 
-Restore is additive and atomic, not a way to undo edits or delete records. Repeat version 2–5 imports do not duplicate stable identities. Older version 1 files have weaker identity guarantees across separate exports. Versions 1–4 are still supported; older plans can have unspecified days. Files must be at most 2 MiB and within the 2,000-ideas/2,000-plans and 1,000-discovery-record limits. For a larger bank, use a full database recovery.
+Restore is additive and atomic, not a way to undo edits or delete records. Repeat version 2–6 imports do not duplicate stable identities. Older version 1 files have weaker identity guarantees across separate exports. Versions 1–5 are still supported; older plans can have unspecified days. Files must be at most 2 MiB and within the 2,000-ideas/2,000-plans and 1,000-discovery-record limits. For a larger bank, use a full database recovery.
 
 ## Move an installation or recover a full database
 
@@ -42,6 +42,6 @@ Full replacement can lose newer edits. Perform it only when you intentionally wa
 4. For Compose, keep the same project and volume; set `GROVE_IMAGE` to the new tag and use the same file list to run `up -d --no-build --pull never`. Do not use `down --volumes`.
 5. Check healthy status, open the UI, restart this container once and verify persistence. Compare a new export to your backup when no user edits occurred between them.
 
-Schema upgrades create `before-upgrade-v2.sqlite3`, `before-upgrade-v3.sqlite3` or `before-upgrade-v5.sqlite3` as needed. These are extra safety copies, not substitutes for an off-device backup. This UI redesign itself did not add a database schema.
+Schema upgrades create `before-upgrade-v2.sqlite3`, `before-upgrade-v3.sqlite3` `before-upgrade-v5.sqlite3` or `before-upgrade-v6.sqlite3` as needed. These are extra safety copies, not substitutes for an off-device backup. Version 6 adds an environment column with Unknown for existing ideas. Older saved snapshots retain their original contents; nothing is inferred or retroactively relabeled.
 
 If an upgrade fails, stop the app and preserve its failed-upgrade data separately. Use the **matching previous image and pre-upgrade database backup** in a separate prepared directory. Do not assume an old image understands a newer schema. Switching only the image can be safe when compatibility is known, but is not a general rollback guarantee. Restore ownership and verify contents before resuming use.

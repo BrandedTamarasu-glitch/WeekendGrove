@@ -163,3 +163,15 @@ input[type=checkbox]{appearance:none;display:inline-grid;place-content:center;bo
 input[type=checkbox]::before{content:"";width:10px;height:6px;border-left:2px solid var(--on-green);border-bottom:2px solid var(--on-green);transform:translateY(-1px) rotate(-45deg);visibility:hidden}
 input[type=checkbox]:checked{background:var(--green);border-color:var(--green)}input[type=checkbox]:checked::before{visibility:visible}
 input[type=checkbox]:disabled{border-style:dashed;background:var(--disabled-bg)}input[type=checkbox]:disabled:checked{background:var(--green)}
+
+/* Optional alternatives stay within the existing palette and card width. */
+.environment-label{font-size:13px;color:var(--muted);margin:10px 0;line-height:1.6}
+#plan-b-options{padding:4px 22px;margin-bottom:20px}#plan-b-options[open]{padding-bottom:20px}
+#plan-b-options>label{margin:16px 0;max-width:600px}#plan-b-options select{margin-top:8px}
+.plan-b-slot:empty,.plan-b-undo:empty{display:none}.plan-b-slot{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+.plan-b-slot .secondary,.plan-b-undo .secondary{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.plan-b-offers{margin-top:16px}.plan-b-option{padding:14px 0;border-top:1px solid var(--line)}.plan-b-option strong{font-size:16px;overflow-wrap:anywhere}
+.plan-b-undo{padding:16px 0}.plan-b-undo p{margin-bottom:10px}
+@media(max-width:600px){#plan-b-options{padding-left:16px;padding-right:16px}.plan-b-slot .secondary{width:100%}}
+
+.weather-inline-source{font-size:12px;line-height:1.5}

@@ -14,6 +14,7 @@ import stat
 import threading
 import time
 import uuid
+import unicodedata
 from datetime import date, datetime, time as clock_time, timedelta, timezone
 from urllib.parse import urlsplit, urlencode, parse_qs
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -239,7 +240,7 @@ def validate_export(value, clean_idea):
         if p is None: continue  # Content-free deduplication/decision tombstone.
         if not isinstance(p,dict) or set(p) != {'title','category','duration','cost','energy','location','metadata'}:
             raise ValueError('Invalid discovery suggestion.')
-        if clean_idea(p) != {k:v for k,v in p.items() if k!='metadata'}:
+        if {k:v for k,v in clean_idea(p).items() if k!='environment'} != {k:v for k,v in p.items() if k!='metadata'}:
             raise ValueError('Noncanonical discovery suggestion.')
         if not clean_metadata(p['metadata']):
             raise ValueError('Discovery suggestions require provenance.')
@@ -451,16 +452,55 @@ def calendar_records(text, origin, venue, settings, now=None):
     return records,skipped
 
 
+def venue_words(value):
+    return re.findall(r"[a-z0-9]+",unicodedata.normalize('NFKD',value).encode('ascii','ignore').decode().lower())
+
+
+def same_venue(left,right):
+    """High-confidence Geoapify alias only; events and branch addresses stay distinct.
+
+    This is suppression, not a destructive merge: existing identity, source facts
+    and decisions remain canonical, and existing duplicate records are not removed.
+    """
+    if not left or not right or left.get('category')!=right.get('category'):return False
+    lm,rm=left.get('metadata') or {},right.get('metadata') or {}
+    if lm.get('source_id')!='geoapify' or rm.get('source_id')!='geoapify':return False
+    if any(m.get('start_date') or m.get('end_date') for m in (lm,rm)):return False
+    names=[venue_words(p.get('title','')) for p in (left,right)]
+    if not all(names):return False
+    descriptors={'restaurant','restaurants','japanese','cuisine','dining','the'}
+    cores=[set(words)-descriptors for words in names]
+    if names[0]!=names[1] and (not cores[0] or cores[0]!=cores[1] or not any(len(w)>=4 for w in cores[0])):return False
+    addresses=[]
+    aliases={'street':'st','avenue':'ave','road':'rd','boulevard':'blvd','drive':'dr','lane':'ln'}
+    for payload,name in zip((left,right),names):
+        words=venue_words(payload.get('location',''))
+        if words[:len(name)]==name:words=words[len(name):]
+        words=[aliases.get(w,w) for w in words]
+        # A shared city/ZIP alone is not evidence of a shared venue.
+        if not words or not words[0].isdigit() or len(words)<3:return False
+        addresses.append(words)
+    if addresses[0]!=addresses[1]:return False
+    try:return distance((lm['latitude'],lm['longitude']),(rm['latitude'],rm['longitude']))<=0.0311 # 50 metres
+    except (KeyError,TypeError,ValueError):return False
+
+
 def apply_records(db,records,now):
     count=db.execute('SELECT COUNT(*) FROM discovery_candidates').fetchone()[0]
     added=0
+    known={row['key']:json.loads(row['payload']) for row in db.execute('SELECT key,payload FROM discovery_candidates')}
     for key,payload in records:
         old=db.execute('SELECT status FROM discovery_candidates WHERE key=?',(key,)).fetchone()
         if old:
             # Refresh pending source facts only. Saved user ideas and decisions remain untouched.
-            if old['status']=='pending':db.execute('UPDATE discovery_candidates SET payload=?,last_seen=? WHERE key=?',(json.dumps(payload),now,key))
+            if old['status']=='pending':
+                db.execute('UPDATE discovery_candidates SET payload=?,last_seen=? WHERE key=?',(json.dumps(payload),now,key))
+                known[key]=payload
+        elif any(same_venue(payload,existing) for existing in known.values()):
+            continue  # Preserve saved/dismissed identity even if provider ID changes.
         elif count<MAX_CANDIDATES:
             db.execute("INSERT INTO discovery_candidates VALUES (?,?,'pending',NULL,?,?)",(key,json.dumps(payload),now,now));added+=1;count+=1
+            known[key]=payload
     return added
 
 

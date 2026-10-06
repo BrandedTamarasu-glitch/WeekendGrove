@@ -4,8 +4,8 @@
   const button=document.querySelector('#check-weather'), weekend=document.querySelector('#planner-form').elements.weekend_date;
   let sequence=0,loading=false,expires,data=null,error='';
   const context=()=>({zip:form.elements.zip.value,zone:form.elements.timezone.value,consent:form.elements.consent.checked,loading,data,error});
-  const paint=()=>document.querySelectorAll('#plan-output [data-plan-weather]').forEach(slot=>{slot.innerHTML=WeatherDisplay.card(slot.dataset.planWeather,context());});
-  window.GroveWeather={card:date=>WeatherDisplay.card(date,context())};
+  const paint=()=>{document.querySelectorAll('#plan-output [data-plan-weather]').forEach(slot=>{slot.innerHTML=WeatherDisplay.card(slot.dataset.planWeather,context());});window.dispatchEvent(new Event('grove-weather-change'));};
+  window.GroveWeather={card:date=>WeatherDisplay.card(date,context()),context};
   function clear(message='') {
     sequence++;loading=false;data=null;error=message;clearTimeout(expires);
     button.disabled=!form.elements.consent.checked;button.textContent='Check weather';

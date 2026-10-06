@@ -59,6 +59,11 @@ def initialize():
             if not safety_copy.exists():
                 with closing(sqlite3.connect(safety_copy)) as target:
                     db.backup(target)
+        if existing and 'environment' not in {r['name'] for r in db.execute('PRAGMA table_info(ideas)')}:
+            safety_copy = DB.parent / 'before-upgrade-v6.sqlite3'
+            if not safety_copy.exists():
+                with closing(sqlite3.connect(safety_copy)) as target:
+                    db.backup(target)
         db.executescript('''
         CREATE TABLE IF NOT EXISTS ideas (
           id INTEGER PRIMARY KEY, title TEXT NOT NULL, category TEXT NOT NULL,
@@ -76,6 +81,8 @@ def initialize():
             db.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS {table}_uid ON {table}(uid)')
         if 'metadata' not in {r['name'] for r in db.execute('PRAGMA table_info(ideas)')}:
             db.execute("ALTER TABLE ideas ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
+        if 'environment' not in {r['name'] for r in db.execute('PRAGMA table_info(ideas)')}:
+            db.execute("ALTER TABLE ideas ADD COLUMN environment TEXT NOT NULL DEFAULT 'unknown'")
         discovery.initialize(db)
         idea_uids = {r['id']: r['uid'] for r in db.execute('SELECT id,uid FROM ideas')}
         for row in db.execute('SELECT id,uid,payload FROM plans').fetchall():
@@ -116,8 +123,11 @@ def clean_idea(data):
     location = data.get('location', '').strip()
     if len(location) > 200:
         raise ValueError('Location must be 200 characters or fewer.')
+    environment = data.get('environment', 'unknown')
+    if environment not in ('indoor', 'outdoor', 'mixed', 'unknown'):
+        raise ValueError('Choose indoor, outdoor, mixed, or unknown.')
     return dict(title=title, category=category, duration=duration, cost=cost,
-                energy=energy, location=location)
+                energy=energy, location=location, environment=environment)
 
 def clean_defaults(data):
     if not isinstance(data, dict) or set(data) != {'duration', 'cost', 'energy'}:
@@ -146,7 +156,7 @@ def set_currency(db, currency, assumed=False):
         db.execute('UPDATE settings SET value=? WHERE key=?', (json.dumps(value), key))
 
 def export_state(db):
-    return dict(version=5, defaults=defaults_from(db), **currency_from(db), discovery=discovery.exported(db),
+    return dict(version=6, defaults=defaults_from(db), **currency_from(db), discovery=discovery.exported(db),
                 ideas=[discovery.idea_row(r) for r in db.execute('SELECT * FROM ideas ORDER BY id DESC')],
                 plans=[dict(id=r['id'], uid=r['uid'], name=r['name'], created=r['created'], **export_payload(r['payload'])) for r in db.execute('SELECT * FROM plans ORDER BY id DESC')])
 
@@ -294,6 +304,78 @@ def generate(ideas, data, rng=None, defaults=None, currency='USD', currency_assu
     chosen = [i if i is not None else next(remaining) for i in slots]
     return dict(items=chosen, schedule=schedule, minutes=used_time, cost=used_cost/100, defaults=defaults, currency=currency, currency_assumed=currency_assumed, limits=limits)
 
+def plan_b(ideas, data):
+    """Read-only preview swaps. The UI gates weather advice; this validates feasibility.
+
+    Undo is an explicit generic replacement, subject to the same current-record,
+    lock and planning constraints, but without requiring an indoor destination.
+    No persisted plan or idea is changed here and no provider is contacted.
+    """
+    plan = data.get('plan')
+    if not isinstance(plan, dict) or set(plan) != {'items', 'schedule', 'minutes', 'cost', 'defaults', 'currency', 'currency_assumed', 'limits'}:
+        raise ValueError('Generate a current preview before choosing Plan B.')
+    include_samples = data.get('include_samples', True)
+    undo = data.get('undo', False)
+    if type(include_samples) is not bool or type(undo) is not bool:
+        raise ValueError('Choose valid demo and undo options.')
+    current = {i['id']: i for i in ideas if not i['archived'] and (include_samples or not i['sample'])}
+    items = plan['items']
+    if not isinstance(items, list) or not 1 <= len(items) <= 6 or any(not isinstance(i, dict) or type(i.get('id')) is not int for i in items):
+        raise ValueError('Generate a preview containing available ideas.')
+    if len({i['id'] for i in items}) != len(items):
+        raise ValueError('Plan ideas must be distinct.')
+    normalize = lambda i: dict(i, environment=i.get('environment', 'unknown'))
+    if any(i['id'] not in current or normalize(current[i['id']]) != normalize(i) for i in items):
+        raise ValueError('An idea changed or became unavailable. Generate a new preview before choosing Plan B.')
+    defaults = clean_defaults(plan['defaults'])
+    currency = clean_currency(plan['currency'])
+    if type(plan['currency_assumed']) is not bool:
+        raise ValueError('Invalid currency assumption.')
+    if not isinstance(plan['limits'], dict):
+        raise ValueError('Generate a preview with valid planning limits.')
+    limits = generate([], plan['limits'], defaults=defaults)['limits']
+    if limits != plan['limits']:
+        raise ValueError('The preview limits have unsupported fields.')
+    minutes, cents = schedule_totals(items, plan['schedule'], limits, defaults)
+    if type(plan['minutes']) is not int or minutes != plan['minutes'] or type(plan['cost']) not in (int, float) or cents / 100 != plan['cost']:
+        raise ValueError('The preview totals changed. Generate a new preview.')
+    locked = data.get('locked', [])
+    ids = {e['id'] for e in plan['schedule']}
+    if not isinstance(locked, list) or any(type(i) is not int or i not in ids for i in locked) or len(set(locked)) != len(locked):
+        raise ValueError('Locked IDs must identify distinct preview entries.')
+    target = data.get('target_id')
+    if type(target) is not int or target not in {i['id'] for i in items}:
+        raise ValueError('Choose an activity in this preview.')
+    if target in locked:
+        raise ValueError('Unlock this activity before swapping it.')
+    if not undo and current[target].get('environment', 'unknown') not in ('outdoor', 'mixed'):
+        raise ValueError('Plan B is offered for outdoor or mixed activities.')
+    used = {i['id'] for i in items}
+    def swap(candidate):
+        changed = [candidate if i['id'] == target else i for i in items]
+        schedule = [dict(e, id=candidate['id']) if e['id'] == target else dict(e) for e in plan['schedule']]
+        total, cost = schedule_totals(changed, schedule, limits, defaults)
+        return dict(plan, items=changed, schedule=schedule, minutes=total, cost=cost / 100)
+    alternatives = []
+    for candidate in sorted(current.values(), key=lambda i: (i['title'].casefold(), i['id'])):
+        if candidate['id'] in used or candidate.get('environment', 'unknown') != 'indoor':
+            continue
+        try:
+            swap(candidate)
+        except ValueError:
+            continue
+        alternatives.append(candidate)
+    result = {'alternatives': alternatives[:12]}
+    if 'replacement_id' in data:
+        replacement = data['replacement_id']
+        if type(replacement) is not int or replacement not in current or replacement in used:
+            raise ValueError('Choose an available replacement not already in the plan.')
+        candidate = current[replacement]
+        if not undo and candidate.get('environment', 'unknown') != 'indoor':
+            raise ValueError('Choose an idea marked indoor for Plan B.')
+        result['plan'] = swap(candidate)
+    return result
+
 SAMPLES = [
     ('Build a small herb planter', 'Projects', 90, 25, 'At home', 'medium'),
     ('Try a neighborhood café', 'Restaurants', 60, 30, 'Nearby', 'low'),
@@ -322,8 +404,8 @@ def validate_backup(text):
     if not isinstance(text, str) or len(text.encode('utf-8')) > MAX_BACKUP:
         raise ValueError('Choose a Weekend Grove JSON export smaller than 2 MiB.')
     data = strict_json(text)
-    if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] not in (1, 2, 3, 4, 5):
-        raise ValueError('This is not a supported Weekend Grove export (version 1, 2, 3, 4, or 5).')
+    if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] not in (1, 2, 3, 4, 5, 6):
+        raise ValueError('This is not a supported Weekend Grove export (version 1, 2, 3, 4, 5, or 6).')
     version = data['version']
     expected = {'version', 'ideas', 'plans'} | ({'defaults'} if version >= 2 else set())
     expected |= {'currency', 'currency_assumed'} if version >= 3 else set()
@@ -353,18 +435,22 @@ def validate_backup(text):
             return value
         return str(uuid.uuid5(uuid.NAMESPACE_URL, f'weekend-grove:legacy:{digest}:{kind}:{record["id"]}'))
 
-    def validate_idea(record):
-        if not isinstance(record, dict) or set(record) != idea_fields:
+    def validate_idea(record, historical=False):
+        fields = idea_fields | ({'environment'} if version >= 6 else set())
+        # Historical snapshots retain their original fields; no setting is inferred.
+        if historical and version >= 6 and isinstance(record, dict) and 'environment' not in record:
+            fields = fields - {'environment'}
+        if not isinstance(record, dict) or set(record) != fields:
             raise ValueError('An idea has missing or unsupported fields.')
         cleaned = clean_idea(record)
-        if any(cleaned[key] != record[key] for key in cleaned):
+        if any(cleaned[key] != record.get(key, 'unknown' if key == 'environment' else None) for key in cleaned):
             raise ValueError('An idea contains noncanonical text. Restore was not changed.')
         for flag in ('archived', 'sample'):
             if type(record[flag]) is not int or record[flag] not in (0, 1):
                 raise ValueError('Archive and demo flags must be 0 or 1.')
         return dict(record, uid=identity(record, 'idea'), metadata=discovery.clean_metadata(record.get('metadata', {})))
 
-    ideas = [validate_idea(i) for i in data['ideas']]
+    ideas = [dict(validate_idea(i), environment=i.get('environment', 'unknown')) for i in data['ideas']]
     if len({i['id'] for i in ideas}) != len(ideas) or len({i['uid'] for i in ideas}) != len(ideas):
         raise ValueError('The backup contains duplicate ideas.')
     by_id = {i['id']: i for i in ideas}
@@ -383,7 +469,7 @@ def validate_backup(text):
             raise ValueError('A saved plan needs a timestamp with a timezone.')
         if not isinstance(row['items'], list) or not 0 <= len(row['items']) <= 6:
             raise ValueError('A saved plan can contain at most six ideas.')
-        items = [validate_idea(i) for i in row['items']]
+        items = [validate_idea(i, historical=True) for i in row['items']]
         if len({i['uid'] for i in items}) != len(items) or len({i['id'] for i in items}) != len(items):
             raise ValueError('A saved plan contains duplicate suggestions.')
         if any(i['id'] not in by_id for i in items):
@@ -444,7 +530,7 @@ def restore_backup(db, backup, apply_defaults=False, acknowledge_relabel=False, 
     existing = {r['uid']: r['id'] for r in db.execute('SELECT id,uid FROM ideas')}
     for row in sorted(backup['ideas'], key=lambda i: i['id']):
         if row['uid'] not in existing:
-            cursor = db.execute('INSERT INTO ideas(uid,title,category,duration,cost,location,energy,archived,sample,metadata) VALUES (:uid,:title,:category,:duration,:cost,:location,:energy,:archived,:sample,:metadata)', dict(row,metadata=json.dumps(row['metadata'])))
+            cursor = db.execute('INSERT INTO ideas(uid,title,category,duration,cost,location,energy,archived,sample,metadata,environment) VALUES (:uid,:title,:category,:duration,:cost,:location,:energy,:archived,:sample,:metadata,:environment)', dict(row,metadata=json.dumps(row['metadata'])))
             existing[row['uid']] = cursor.lastrowid
     plans = {r['uid'] for r in db.execute('SELECT uid FROM plans')}
     for row in sorted(backup['plans'], key=lambda p: p['id']):
@@ -489,7 +575,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         static_types = {
             '/': 'text/html; charset=utf-8', '/app.js': 'text/javascript',
-            '/theme.js': 'text/javascript', '/weather-view.js': 'text/javascript', '/weather.js': 'text/javascript', '/discovery.js': 'text/javascript', '/style.css': 'text/css', '/icon.svg': 'image/svg+xml',
+            '/plan-b.js': 'text/javascript', '/plan-b-view.js': 'text/javascript', '/theme.js': 'text/javascript', '/weather-view.js': 'text/javascript', '/weather.js': 'text/javascript', '/discovery.js': 'text/javascript', '/style.css': 'text/css', '/icon.svg': 'image/svg+xml',
             '/favicon.ico': 'image/vnd.microsoft.icon', '/icon-32.png': 'image/png',
             '/apple-touch-icon.png': 'image/png', '/icon-192.png': 'image/png',
             '/icon-512.png': 'image/png', '/site.webmanifest': 'application/manifest+json',
@@ -541,13 +627,16 @@ class Handler(BaseHTTPRequestHandler):
                 elif path == '/api/discovery/decision':
                     reply = discovery.decide(db, data.get('key'), data.get('action'))
                 elif path == '/api/ideas':
+                    if data.get('id') is not None and 'environment' not in data:
+                        existing = db.execute('SELECT environment FROM ideas WHERE id=?', (data['id'],)).fetchone()
+                        if existing: data = dict(data, environment=existing['environment'])
                     idea = clean_idea(data)
                     if data.get('id') is not None:
-                        cursor = db.execute('UPDATE ideas SET title=:title, category=:category, duration=:duration, cost=:cost, location=:location, energy=:energy, sample=0 WHERE id=:id', dict(idea, id=data['id']))
+                        cursor = db.execute('UPDATE ideas SET title=:title, category=:category, duration=:duration, cost=:cost, location=:location, energy=:energy, environment=:environment, sample=0 WHERE id=:id', dict(idea, id=data['id']))
                         if cursor.rowcount != 1:
                             raise ValueError('Idea no longer exists.')
                     else:
-                        db.execute('INSERT INTO ideas(uid,title,category,duration,cost,location,energy) VALUES (:uid,:title,:category,:duration,:cost,:location,:energy)', dict(idea, uid=str(uuid.uuid4())))
+                        db.execute('INSERT INTO ideas(uid,title,category,duration,cost,location,energy,environment) VALUES (:uid,:title,:category,:duration,:cost,:location,:energy,:environment)', dict(idea, uid=str(uuid.uuid4())))
                 elif path == '/api/archive':
                     if type(data.get('archived')) is not bool:
                         raise ValueError('Archive state must be true or false.')
@@ -578,6 +667,9 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError('Choose whether to include demo ideas.')
                     ideas = [discovery.idea_row(r) for r in db.execute('SELECT * FROM ideas') if data.get('include_samples', True) or not r['sample']]
                     return self.send(generate(ideas, data, defaults=defaults_from(db), **currency_from(db)))
+                elif path == '/api/plan-b':
+                    ideas = [discovery.idea_row(r) for r in db.execute('SELECT * FROM ideas')]
+                    return self.send(plan_b(ideas, data))
                 elif path == '/api/plans':
                     if not isinstance(data.get('name'), str):
                         raise ValueError('Give the plan a text name.')
