@@ -21,6 +21,7 @@ Dates from event sources must match the selected Saturday/Sunday. The planner do
 - **Appearance:** device setting, light or dark. This preference stays in the current browser; other browsers choose independently.
 - **Cost currency:** USD, CAD, EUR, GBP, AUD or NZD. Changing currency relabels existing amounts; it does not convert them. Existing snapshots keep their currency.
 - **Backups & sample ideas:** JSON export/restore, consistent database download and optional generic demos. Editing a demo makes it your own.
+- **Automatic database backups:** optional daily copies to an installer-selected, mounted folder. Choose your timezone/time and retention, approve scheduling and cleanup separately, and review last-success/failure status. Both are disabled by default; see [setup and recovery](../portable-itineraries-and-backups.md).
 
 An explicit cost of zero means free; blank cost means unknown. Energy is a maximum per idea, not a cumulative weekend effort score.
 

@@ -8,7 +8,7 @@ Collect projects, restaurants, places and activities. Pick your limits, generate
 
 ## Portable itineraries and backups
 
-Download or print a standalone itinerary from a current or saved weekend, with optional copy-only notes. Automatic SQLite backups have explicit destination/schedule/retention approval, integrity verification and visible status; both scheduling and cleanup default off. See [setup, privacy and isolated recovery](docs/portable-itineraries-and-backups.md). Container verification and production deployment must be completed for each installation.
+Download or print a standalone itinerary from a current or saved weekend, with optional copy-only notes. Automatic SQLite backups have explicit destination/schedule/retention approval, integrity verification and visible status; both scheduling and cleanup default off. See [setup, privacy and isolated recovery](docs/portable-itineraries-and-backups.md). The pinned release has passed Unraid container, restart and isolated restore checks; each installation still needs its own approved destination and policy.
 
 ## What you can do
 
@@ -56,11 +56,11 @@ A fresh install starts with lookups and weekly refresh off. Review provider term
 
 ## Honest limits
 
-Suggestions are not reservations or guarantees of suitability. Check original listings, opening hours, prices and accessibility. Distances are approximate straight lines; routes and clock-time conflicts are not calculated. Missing cost/time/energy use labeled estimates. Currency changes relabel amounts without conversion. There is no plan deletion, automatic backup schedule, authentication or multi-user separation yet.
+Suggestions are not reservations or guarantees of suitability. Check original listings, opening hours, prices and accessibility. Distances are approximate straight lines; routes and clock-time conflicts are not calculated. Missing cost/time/energy use labeled estimates. Currency changes relabel amounts without conversion. There is no plan deletion, authentication or multi-user separation yet. Automatic backups require an explicit destination, schedule and retention policy; they are not enabled on a fresh install.
 
 ## Keep your data safe
 
-Use **Settings → Export JSON** and **Database backup**, with a copy on another device. JSON restore adds missing records rather than replacing edits; full database recovery is a separate deliberate operation. Keys are excluded from these app backups. Read [backups, upgrades and rollback](docs/guide/Backups-and-upgrades.md) before changing an existing installation.
+Use **Settings → Export JSON** and **Database backup**, with a copy on another device. JSON restore adds missing records rather than replacing edits; full database recovery is a separate deliberate operation. Optional daily database copies use an existing, dedicated folder selected by the installer. Scheduling and deletion need separate approvals; cleanup selects only feature-owned copies with matching checksums. Keys are excluded from these app backups. A second drive in the same server does not protect against server-wide loss. Read [backups, upgrades and rollback](docs/guide/Backups-and-upgrades.md) before changing an existing installation.
 
 ## Documentation and verification
 

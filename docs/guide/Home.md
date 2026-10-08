@@ -13,6 +13,7 @@ Weekend Grove is a small self-hosted idea bank and weekend planner. Keep a list 
 | Learn the app | [Settings and everyday use](Settings-and-everyday-use.md) |
 | Connect your own Geoapify account | [API keys and discovery](API-keys-and-discovery.md) |
 | See the weekend forecast | [Weather](Weather.md) |
+| Download/print an itinerary or configure automatic copies | [Portable itineraries and backups](../portable-itineraries-and-backups.md) |
 | Move, back up or update an installation | [Backups and upgrades](Backups-and-upgrades.md) |
 | Resolve an installation problem | [Troubleshooting](Troubleshooting.md) |
 
