@@ -6,6 +6,10 @@ Collect projects, restaurants, places and activities. Pick your limits, generate
 
 **[Installation guide](docs/guide/Home.md) · [GitHub Wiki](https://github.com/BrandedTamarasu-glitch/WeekendGrove/wiki) · [Unraid setup](docs/guide/Unraid-installation.md) · [Bring your own API key](docs/guide/API-keys-and-discovery.md)**
 
+## Portable itineraries and backups
+
+Download or print a standalone itinerary from a current or saved weekend, with optional copy-only notes. Automatic SQLite backups have explicit destination/schedule/retention approval, integrity verification and visible status; both scheduling and cleanup default off. See [setup, privacy and isolated recovery](docs/portable-itineraries-and-backups.md). Container verification and production deployment must be completed for each installation.
+
 ## What you can do
 
 - **Ideas:** add a title and category, fill in details later, search/filter, edit and archive.
@@ -70,9 +74,10 @@ node tests/weather_view_test.cjs
 node tests/plan_b_view_test.cjs
 node tests/theme_test.cjs
 node tests/readability_test.cjs
+node tests/itinerary_test.cjs
 ```
 
-This feature release passed 94 Python tests and the JavaScript suites above. A pinned image has also been built and checked on Unraid for health/restart/data preservation. Desktop and 320/390px browser layouts were checked; physical-phone coverage and universal platform support are not claimed. See [verification](docs/verification.md) and [roadmap](ROADMAP.md).
+The itinerary/backup release passed 105 Python tests and the JavaScript suites above. A pinned image has also been built and checked on Unraid for health/restart/data preservation. Desktop and 320/390px browser layouts were checked; physical-phone coverage and universal platform support are not claimed. See [verification](docs/verification.md) and [roadmap](ROADMAP.md).
 
 ## License
 

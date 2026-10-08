@@ -18,3 +18,7 @@ Each installation still needs its own healthy storage, permissions, backup and p
 ## Discovery and Plan B
 
 Discovery diversity and conservative venue dedupe, plus optional weather-aware Plan B with user-set indoor/outdoor labels, are implemented. Next in the requested order: portable itinerary, automatic backups, then completed-weekend feedback. Those later items are not part of this change.
+
+## Portable itinerary and backup follow-up
+
+Portable itineraries and opt-in automatic database backups are implemented. Backup destination, timing/timezone, retention/deletion permission and activation still require owner choices. No production backup schedule is enabled by this work. Completed-weekend feedback remains deferred.

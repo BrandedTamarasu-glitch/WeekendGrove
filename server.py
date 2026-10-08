@@ -10,6 +10,7 @@ import tempfile
 import uuid
 import discovery
 import weather
+import backups
 from contextlib import closing
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -24,6 +25,9 @@ DEFAULTS = dict(duration=60, cost=20, energy='medium')
 DAYS = ('Saturday', 'Sunday')
 CURRENCIES = ('USD', 'CAD', 'EUR', 'GBP', 'AUD', 'NZD')
 MAX_BACKUP = 2 * 1024 * 1024
+
+def backup_manager():
+    return backups.Manager(DB, os.environ.get('GROVE_BACKUP_DIR'))
 
 class Database(sqlite3.Connection):
     def __exit__(self, *args):
@@ -574,6 +578,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlparse(self.path).path
         static_types = {
+            '/itinerary.js': 'text/javascript', '/backup-ui.js': 'text/javascript',
             '/': 'text/html; charset=utf-8', '/app.js': 'text/javascript',
             '/plan-b.js': 'text/javascript', '/plan-b-view.js': 'text/javascript', '/theme.js': 'text/javascript', '/weather-view.js': 'text/javascript', '/weather.js': 'text/javascript', '/discovery.js': 'text/javascript', '/style.css': 'text/css', '/icon.svg': 'image/svg+xml',
             '/favicon.ico': 'image/vnd.microsoft.icon', '/icon-32.png': 'image/png',
@@ -584,6 +589,9 @@ class Handler(BaseHTTPRequestHandler):
             name = 'index.html' if path == '/' else path[1:]
             mime = static_types[path]
             return self.send((ROOT / 'static' / name).read_bytes(), content_type=mime)
+        if path == '/api/backups':
+            try: return self.send(backup_manager().view())
+            except (ValueError, OSError): return self.send({'error': 'Backup control storage is unavailable; scheduling is stopped.'}, 503)
         with connect() as db:
             if path == '/api/discovery':
                 return self.send(discovery.view(db))
@@ -618,6 +626,14 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError('Expected a JSON object.')
             if path == '/api/weather':
                 return self.send(weather.lookup(connect, data))
+            if path == '/api/backups/settings':
+                return self.send(backup_manager().configure(data))
+            if path == '/api/backups/run':
+                if data.get('approve_backup') is not True:
+                    raise ValueError('Approve writing a database copy to the configured backup folder.')
+                manager = backup_manager()
+                succeeded = manager.run()
+                return self.send(manager.view(), 200 if succeeded else 503)
             if path == '/api/discovery/refresh':
                 return self.send({'started': discovery.launch(connect, manual=True)}, 202)
             reply = {'ok': True}
@@ -711,6 +727,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send({'error': str(error)}, 400)
         except sqlite3.Error:
             self.send({'error': 'Storage is unavailable. Check the data directory and try again.'}, 503)
+        except OSError:
+            self.send({'error': 'Storage is unavailable. Check the configured folder and permissions.'}, 503)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -719,11 +737,13 @@ def main():
     args = parser.parse_args()
     initialize()
     stop = discovery.start_scheduler(connect)
+    backup_stop = backup_manager().start()
     print(f'Weekend Grove: http://{args.host}:{args.port}', flush=True)
     try:
         ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
     finally:
         stop.set()
+        backup_stop.set()
 
 if __name__ == '__main__':
     main()

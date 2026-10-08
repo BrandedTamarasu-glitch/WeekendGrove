@@ -2,7 +2,7 @@
 
 [Guide home](Home.md) · [Troubleshooting](Troubleshooting.md)
 
-Your data is the most important part of the installation. Keep a fresh private backup on a different device before an upgrade or move. The app does not schedule backups for you.
+Your data is the most important part of the installation. Keep a fresh private backup on a different device before an upgrade or move. Automatic backups are available and remain off until explicitly configured and approved; see [automatic backup setup and isolated recovery](../portable-itineraries-and-backups.md).
 
 ## Make a backup
 
@@ -42,6 +42,6 @@ Full replacement can lose newer edits. Perform it only when you intentionally wa
 4. For Compose, keep the same project and volume; set `GROVE_IMAGE` to the new tag and use the same file list to run `up -d --no-build --pull never`. Do not use `down --volumes`.
 5. Check healthy status, open the UI, restart this container once and verify persistence. Compare a new export to your backup when no user edits occurred between them.
 
-Schema upgrades create `before-upgrade-v2.sqlite3`, `before-upgrade-v3.sqlite3` `before-upgrade-v5.sqlite3` or `before-upgrade-v6.sqlite3` as needed. These are extra safety copies, not substitutes for an off-device backup. Version 6 adds an environment column with Unknown for existing ideas. Older saved snapshots retain their original contents; nothing is inferred or retroactively relabeled.
+Schema upgrades create `before-upgrade-v2.sqlite3`, `before-upgrade-v3.sqlite3`, `before-upgrade-v5.sqlite3` or `before-upgrade-v6.sqlite3` as needed. These are extra safety copies, not substitutes for an off-device backup. Version 6 adds an environment column with Unknown for existing ideas. Older saved snapshots retain their original contents; nothing is inferred or retroactively relabeled.
 
 If an upgrade fails, stop the app and preserve its failed-upgrade data separately. Use the **matching previous image and pre-upgrade database backup** in a separate prepared directory. Do not assume an old image understands a newer schema. Switching only the image can be safe when compatibility is known, but is not a general rollback guarantee. Restore ownership and verify contents before resuming use.
