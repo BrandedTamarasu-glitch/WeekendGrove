@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const itinerary=require('../static/itinerary.js');
+const p={name:'<script>alert(1)</script>',minutes:75,cost:20,currency:'USD',limits:{budget:60,weekend_date:'2026-10-10'},defaults:{duration:60,cost:20},items:[{id:1,title:'Garden <img src=x onerror=alert(1)>',category:'Places',location:'123 Example St & A <script>',duration:null,cost:null,metadata:{time_label:'Verify hours',source_url:'javascript:bad()'}}],schedule:[{id:1,kind:'idea',day:'Saturday'},{id:-2,kind:'lazy',day:'Sunday',duration:15}]};
+const before=JSON.stringify(p),html=itinerary.html(p,'Pack snacks\n</p><script>bad()</script>');
+assert.equal(JSON.stringify(p),before);
+assert(html.includes('2026-10-10'));assert(html.includes('2026-10-11'));assert(html.includes('Lazy Day time'));
+assert(html.includes('60 min (estimate)'));assert(html.includes('20.00 USD (estimate)'));
+assert(html.includes('&lt;script&gt;'));assert(!/<script[\s>]/i.test(html));assert(!html.includes('<img'));
+assert(!html.includes('javascript:'));assert(!html.includes('source_url'));assert(!html.includes('fetch('));
+assert(html.includes('destination=123%20Example%20St%20%26%20A%20%3Cscript%3E'));
+assert(html.includes("default-src 'none'"));assert(html.includes('no-referrer'));
+assert(!/<[^>]+\s(?:src|srcset)=/.test(html));assert(!/@import|url\(/.test(html));
+const legacy=itinerary.html({...p,schedule:[],limits:{}});assert(legacy.includes('Day unspecified'));assert(!legacy.includes('2026-10-10'));
+const missing=itinerary.html({...p,items:[{...p.items[0],location:''}]});assert(missing.includes('Location not recorded'));assert(!missing.includes('href='));
+console.log('Itinerary checks passed: dates, legacy snapshots, estimates, notes escaping, script/asset exclusion and explicit map links.');

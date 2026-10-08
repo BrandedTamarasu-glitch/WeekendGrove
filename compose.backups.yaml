@@ -1,0 +1,12 @@
+# Optional only after the owner approves this dedicated host destination.
+# This configures access; scheduling and deletion still require Settings approval.
+services:
+  weekend-grove:
+    environment:
+      GROVE_BACKUP_DIR: /backups
+    volumes:
+      - type: bind
+        source: ${GROVE_BACKUP_PATH:?Choose an existing dedicated backup folder first}
+        target: /backups
+        bind:
+          create_host_path: false

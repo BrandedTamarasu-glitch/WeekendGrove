@@ -51,3 +51,7 @@ Check weather manually as usual. For outdoor/mixed suggestions, a fresh matching
 **Keep current idea** cancels; **Undo last swap** explicitly restores the previous idea if it is still available and fits. Unlock a replacement before undoing. Swaps affect only the unsaved preview; save it when ready. Existing historical plans remain unchanged. No feasible alternative is a normal result—add an indoor idea or keep the plan.
 
 No extra provider lookup is made by Plan B. Outages, revoked permission, wrong ZIP/date/timezone and forecasts aged one hour or more block new advice. Unknown weather does not mean safe weather. ZIP-area forecasts may differ at a day-trip destination, and an Indoor label is not a guarantee of accessibility or suitability.
+
+## Portable itinerary
+
+Use **Download / print itinerary** from a generated plan or an expanded saved weekend. Optional notes affect only that copy. Downloaded HTML works offline without scripts/assets; browser printing supports paper or PDF. Map links make no request until you open them. Old snapshots retain unspecified dates rather than inventing them. See [portable itineraries and backups](../portable-itineraries-and-backups.md) for privacy and setup details.

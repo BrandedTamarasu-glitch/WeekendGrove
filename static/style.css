@@ -175,3 +175,9 @@ input[type=checkbox]:disabled{border-style:dashed;background:var(--disabled-bg)}
 @media(max-width:600px){#plan-b-options{padding-left:16px;padding-right:16px}.plan-b-slot .secondary{width:100%}}
 
 .weather-inline-source{font-size:12px;line-height:1.5}
+
+/* Portable itinerary and explicit backup setup. */
+.backup-form{display:grid;gap:16px;max-width:640px}.backup-form input:not([type=checkbox]){width:100%}.itinerary-actions{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}#itinerary-dialog{width:min(800px,calc(100% - 24px));max-height:90vh;overflow:auto}#itinerary-notes{width:100%;font:inherit;color:var(--ink);background:var(--surface);padding:12px;border:1px solid var(--control);border-radius:8px}#itinerary-preview{overflow-wrap:anywhere;margin-top:24px}#itinerary-preview header,#itinerary-preview footer{position:static;padding:16px 0;text-align:left}#itinerary-preview h1{font-size:28px}#itinerary-preview h2{font-size:22px}#itinerary-preview h3{font-size:19px}#itinerary-preview article{padding:16px;border:1px solid var(--line);border-radius:12px;margin:12px 0}#itinerary-preview a{display:inline-block;min-height:44px;padding:10px 0}#itinerary-preview .trip-notes{white-space:pre-wrap}#itinerary-preview footer{font-size:13px;display:block}.settings-card strong{overflow-wrap:anywhere}
+@media print{body:has(#itinerary-dialog[open])> :not(#itinerary-dialog){display:none!important}#itinerary-dialog[open]{position:static;display:block;width:100%;max-width:none;max-height:none;height:auto;overflow:visible;border:0;padding:0;margin:0;color:black;background:white}#itinerary-dialog::backdrop{display:none}#itinerary-dialog .itinerary-controls{display:none}#itinerary-preview{margin:0}#itinerary-preview article{break-inside:avoid;border-color:#777}#itinerary-preview a{color:black}#itinerary-preview footer{color:black}}
+
+#itinerary-notes:focus-visible{outline:2px solid var(--focus);outline-offset:3px}

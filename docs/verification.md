@@ -1,5 +1,11 @@
 # Verification record
 
+## Itineraries and backups — publication validation
+
+105 offline Python tests and five JavaScript suites pass. New checks cover database-only copies, private permissions, corruption/unavailable storage, interrupted operations, overlap prevention, retention ownership/checksums, destination reapproval, DST/catch-up, and isolated restore with saved snapshots/discovery decisions/currency preserved across reinitialization. Itinerary safety checks cover escaped content, explicit map links, missing dates/locations, estimates, Lazy Day blocks and no scripts or external assets.
+
+Isolated headless Chromium checked current/saved/legacy itineraries, download and PDF print content, cancelling and reopening notes, both palettes at desktop/390/320px, backup approval/pause, cancelled/repeated manual copies and simulated failure recovery. A downloaded file rendered with JavaScript disabled and made no external requests. This is local browser emulation, not a physical-phone test. The optional backup Compose overlay was configuration-checked, including missing-destination rejection; no container runtime or production deployment is claimed for this branch.
+
 ## Discovery and Plan B — released October 6, 2026
 
 94 Python tests and four JavaScript suites pass with ResourceWarnings treated as errors. Fixtures cover bounded Geoapify paging/directional diversity, alias false positives, preserved decisions/edits, moved venues, v6 migration/legacy restore, locked and duplicate swaps, time/budget/energy/category/date constraints and explicit undo. Pure weather-gate checks cover stale, mismatched, unavailable and unknown forecasts plus configurable thresholds. No provider or production requests were used.
