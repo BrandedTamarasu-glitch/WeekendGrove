@@ -84,6 +84,30 @@ Try the address on a phone using home Wi-Fi. Check that you see the same data an
 
 This app has no login. No port forwarding, public proxy, tunnel, host networking or network-security change is part of installation. If it cannot be reached, use [Troubleshooting](Troubleshooting.md) before changing firewall/access rules.
 
+## Optional automatic backups
+
+After the app is healthy, choose a dedicated backup folder on storage you have checked for health and free space. A different physical disk separates the copy from the live database, but another copy off the server is still needed for server-wide loss. Do not assume any disk number, mount name or someone else's schedule is appropriate for your installation.
+
+For a **new empty folder only**, replace the placeholder with your verified, mounted destination before running:
+
+```sh
+mkdir -p /mnt/CONFIRMED_BACKUP_STORAGE/backups/weekend-grove
+chown 10001:10001 /mnt/CONFIRMED_BACKUP_STORAGE/backups/weekend-grove
+chmod 700 /mnt/CONFIRMED_BACKUP_STORAGE/backups/weekend-grove
+```
+
+Confirm that this path is on the intended mounted filesystem. Do not run these examples unchanged, copy the live database with ordinary file-copy commands, or change ownership recursively on existing storage.
+
+Edit the existing native template and append the following to **Extra Parameters**, replacing the host path. Preserve the existing image, data mount, provider-key file variables, network binding and restrictions:
+
+```text
+--mount type=bind,src=/mnt/CONFIRMED_BACKUP_STORAGE/backups/weekend-grove,dst=/backups --env GROVE_BACKUP_DIR=/backups
+```
+
+Apply and check health. This adds access to the folder; it does not enable scheduling or cleanup. In **Settings → Automatic database backups**, verify `/backups`, choose your daily time, IANA timezone and retention, then approve scheduling and, separately, deletion if wanted. Form defaults are suggestions, not an activated policy. Run **Back up now**, check last-success status, and perform the [isolated recovery check](../portable-itineraries-and-backups.md#isolated-recovery-check). Restart only this app and confirm the settings persist. Future scheduled runs require the app to remain running.
+
+For an existing Compose installation, add `GROVE_BACKUP_PATH` to its private configuration and include `compose.backups.yaml` with the same existing Compose file list/project. Validate the combined configuration before applying it. The overlay refuses a missing source folder; keep it in subsequent upgrade commands so the backup mount remains attached. The provider overlay, if used, is separate and must also be preserved.
+
 ## Alternative: an existing Compose setup
 
 Do not create the native template if you choose this route. Copy `.env.example` to a private `.env` and set `GROVE_IMAGE`, `GROVE_BIND_IP`, `GROVE_PORT`, `GROVE_ALLOWED_HOSTS` and `GROVE_APPDATA_PATH` to the verified values above. Do not put secrets in `.env`.

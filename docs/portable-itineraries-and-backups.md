@@ -1,6 +1,6 @@
 # Portable itineraries and automatic backups
 
-Local automated and browser checks passed. Container validation and production deployment remain pending; installation owners must approve their own backup destination and policy.
+Local automated and browser checks passed. The pinned release also passed Unraid container validation, production restart and isolated restore checks; see the [verification record](verification.md). Installation owners must choose and approve their own backup destination and policy.
 
 ## Take a weekend with you
 
@@ -18,7 +18,7 @@ Scheduling and retention deletion default to **off**. Proposed form defaults are
 
 This scheduler requires Unix file-lock support (including the Linux container); native Windows can still use manual database downloads. The server reads `GROVE_BACKUP_DIR` for an existing, dedicated, writable absolute folder. It refuses symlink paths, the app data directory itself and a `secrets` directory. It does not create a destination or choose an external service. Native Python uses its process account; the container needs the chosen folder writable by UID/GID 10001. Do not apply broad ownership or permission changes to unrelated storage.
 
-For a container, a backup destination must be explicitly mounted. The optional `compose.backups.yaml` requires `GROVE_BACKUP_PATH` and refuses to create a missing host folder. Review the path and mount before applying it. Native Unraid needs an equivalent separately approved mapping and environment setting. No production template changes are part of this preview.
+For a container, a backup destination must be explicitly mounted. The optional `compose.backups.yaml` requires `GROVE_BACKUP_PATH` and refuses to create a missing host folder. Review the path and mount before applying it. For native Unraid, follow the [dedicated backup mapping steps](guide/Unraid-installation.md#optional-automatic-backups). Keep the existing data mount, key-file references, port binding and runtime restrictions.
 
 In **Settings → Automatic database backups**, inspect the configured destination. Set daily time, IANA timezone and retention. Enabling scheduling requires its approval checkbox; cleanup requires a separate deletion authorization. Changing the settings clears those approvals. Changing the server destination pauses effective scheduling/cleanup until the new folder is approved. With cleanup off, copies accumulate without a cap; monitor free space.
 
@@ -34,13 +34,13 @@ The app must be running. It checks every 30 seconds, attempts at most one due sl
 
 Backup controls, approvals, checksums and status live in `backup-control.json` beside the database and are intentionally excluded from JSON and SQLite exports. Restoring only a database into a fresh instance therefore does not enable automatic backups. A full SQLite restore still retains discovery permissions and its weekly schedule: isolate it from the network while checking it. Do not copy an old backup control file into a new installation to enable scheduling.
 
-No directory ZIP, recursive archive or API-key file copy is created. Database backups still contain entered information, discovery state and potentially retained provider facts. They are not encrypted by the app. Protect their storage separately. Same-disk backups help recover mistakes but **do not protect against disk failure**; an independent device or storage destination requires a separate owner decision and approval. No external transmission is implemented.
+No directory ZIP, recursive archive or API-key file copy is created. Database backups still contain entered information, discovery state and potentially retained provider facts. They are not encrypted by the app. Protect their storage separately. Same-disk backups help recover mistakes but **do not protect against disk failure**. A different disk in the same server does not protect against server-wide loss. Keep an additional private copy on an independent device or separately chosen storage destination. No external transmission is implemented.
 
 ## Isolated recovery check
 
 1. Keep production and its existing files untouched. Select a completed backup and preserve the original.
 2. Create a new private test data directory. Copy only the selected SQLite file there as `weekend.sqlite3`; do not copy old WAL/SHM files, key files or `backup-control.json`.
 3. Check `PRAGMA integrity_check` using Python/SQLite. Use the same app version, or an explicitly tested newer version, with that directory.
-4. Run with network disabled and no keys. Bind a different localhost-only port if interactive inspection is needed; never point the test instance at production data. Do not start discovery scheduling against the network.
+4. Run with network disabled and no keys. A Docker container with network mode `none` is suitable for noninteractive checks and has no published port. If interactive inspection is needed, use a separately isolated setup that blocks outbound traffic and binds only a different localhost port; never point the test instance at production data. Do not start discovery scheduling against the network.
 5. Compare complete JSON exports, stable identifiers, saved snapshot content, archive state, currencies and discovery decisions; restart the isolated instance and repeat. Confirm automatic backups remain disabled.
 6. Stop the isolated instance. Restoring over production is a separate, explicit recovery operation requiring preservation of the current database and a compatible app image; see [Backups and upgrades](guide/Backups-and-upgrades.md).

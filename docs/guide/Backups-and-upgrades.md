@@ -13,6 +13,14 @@ Open **Settings → Backups & sample ideas**:
 
 Keep both before an upgrade, labeled with the date and current image/source commit. Backups contain your entered information. Never attach them to a public issue. Provider key files are excluded from both formats; protect them separately if you need to preserve them. A copy of the whole `/data` directory can include secrets, so do not treat it like a public diagnostic bundle.
 
+## Automatic copies and a recovery rehearsal
+
+Choose an existing dedicated destination, then configure its container mount and `GROVE_BACKUP_DIR`; [Unraid instructions](Unraid-installation.md#optional-automatic-backups) include native-template and Compose routes. In Settings, approve your own daily time, IANA timezone and retention. Scheduling and cleanup both start off. Cleanup only selects older successful copies recorded by this feature with matching checksums; manual, migration and modified copies are preserved. Check free space, especially when cleanup is disabled.
+
+Before relying on the destination, run a manual copy and check the last-success status. Rehearse recovery in a separate private directory with no keys or network: check SQLite integrity, start the same app version against the copied database, compare exports, and repeat initialization/restart. Never point the test at the live data directory. See the [full isolated recovery procedure](../portable-itineraries-and-backups.md#isolated-recovery-check).
+
+`backup-control.json` contains scheduling approvals and status outside the database. A database-only restore into a fresh directory leaves automatic backups disabled; do not copy old approvals to activate a new destination. Full SQLite recovery still retains discovery permissions and its weekly schedule, so isolate the recovery check from the network. Keep a private off-server copy too: a second server disk does not protect against server-wide loss.
+
 ## Restore JSON without replacing existing records
 
 1. Take a backup of the destination installation first.
@@ -38,9 +46,9 @@ Full replacement can lose newer edits. Perform it only when you intentionally wa
 
 1. Read the changes and record the current commit/image tag. Export JSON and download a consistent database backup.
 2. Fetch the new source and select its exact reviewed commit. Build `weekend-grove:NEW_COMMIT_SHA` before touching the running container. Keep the previous image.
-3. For a native Unraid template, edit **only Repository** to the new pinned tag and Apply. Preserve storage, key-file variables, binding and security parameters.
-4. For Compose, keep the same project and volume; set `GROVE_IMAGE` to the new tag and use the same file list to run `up -d --no-build --pull never`. Do not use `down --volumes`.
-5. Check healthy status, open the UI, restart this container once and verify persistence. Compare a new export to your backup when no user edits occurred between them.
+3. For a native Unraid template, edit **only Repository** to the new pinned tag and Apply. Preserve storage, the optional backup mount and `GROVE_BACKUP_DIR`, key-file variables, binding and security parameters.
+4. For Compose, keep the same project and volume; set `GROVE_IMAGE` to the new tag and use the same file list, including any provider/backup overlays, to run `up -d --no-build --pull never`. Do not use `down --volumes`.
+5. Check healthy status, open the UI, restart this container once and verify persistence. Compare a new export to your backup when no user edits occurred between them. If automatic backups are configured, confirm their destination, schedule, retention and last-success status survived; perform an isolated restore check before relying on a new backup destination.
 
 Schema upgrades create `before-upgrade-v2.sqlite3`, `before-upgrade-v3.sqlite3`, `before-upgrade-v5.sqlite3` or `before-upgrade-v6.sqlite3` as needed. These are extra safety copies, not substitutes for an off-device backup. Version 6 adds an environment column with Unknown for existing ideas. Older saved snapshots retain their original contents; nothing is inferred or retroactively relabeled.
 
